@@ -16,8 +16,8 @@ This project builds off of that research by exploring how certain socio-economic
 
 As mentioned above this work builds off of data and research from The Opportunity Atlas, a research project led by Raj Chetty, et al.  You can find links to the original work and data below as well as a New York Times article regarding the work:
 
- + (Original Paper)[https://opportunityinsights.org/wp-content/uploads/2018/10/atlas_paper.pdf]
- + (Opportunity Insights Web Page)[https://opportunityinsights.org/paper/the-opportunity-atlas/]
- + (Opportunity Atlas)[https://www.opportunityatlas.org/]
- + (NYT Article)[https://www.nytimes.com/2018/10/01/upshot/maps-neighborhoods-shape-child-poverty.html]
- + (Data)[https://opportunityinsights.org/data/?geographic_level=0&topic=0&paper_id=1652#resource-listing]
+ + [Original Paper](https://opportunityinsights.org/wp-content/uploads/2018/10/atlas_paper.pdf)
+ + [Opportunity Insights Web Page](https://opportunityinsights.org/paper/the-opportunity-atlas/)
+ + [Opportunity Atlas](https://www.opportunityatlas.org/)
+ + [NYT Article](https://www.nytimes.com/2018/10/01/upshot/maps-neighborhoods-shape-child-poverty.html)
+ + [Data](https://opportunityinsights.org/data/?geographic_level=0&topic=0&paper_id=1652#resource-listing)
