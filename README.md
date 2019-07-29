@@ -21,3 +21,7 @@ As mentioned above this work builds off of data and research from The Opportunit
  + [Opportunity Atlas](https://www.opportunityatlas.org/)
  + [NYT Article](https://www.nytimes.com/2018/10/01/upshot/maps-neighborhoods-shape-child-poverty.html)
  + [Data](https://opportunityinsights.org/data/?geographic_level=0&topic=0&paper_id=1652#resource-listing)
+ 
+ ### Author's Notes
+ 
+To view a rough draft of this work, which I'm going to be refining and adding to in the coming months, the easiest way currently is to download a [zip of this repository](https://github.com/miguelito34/upward-mobility/archive/master.zip). As I refine and update the work I'll find better ways to display the charts and maps.
