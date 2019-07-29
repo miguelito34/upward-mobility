@@ -1,0 +1,429 @@
+---
+title: "hometown-outcomes-1"
+author: "Michael"
+date: 2019-02-22
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(sf)
+library(tidycensus)
+library(tidyverse)
+# task-begin
+library(dcl)
+# task-end
+
+# Parameters
+
+# solution-begin
+  # File where generated answers are saved, by default in the home directory
+file_answers <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\ho-1\\answers.rds"
+# solution-end
+
+  # File for downloaded answers
+file_answers <- "~/answers.rds"
+
+  # Census API Key
+census_key <- "891e70ea96814a52b3992d4f85fd4fb500721349"
+
+  # County level outcomes filepath
+county_outcomes_ez_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\county_outcomes_ez.csv"
+
+  # Census tract level outcomes filepath
+ct_outcomes_ez_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\ct_outcomes_ez.csv"
+
+  # Alaska State FIP
+alaska_state_fip <- 2
+
+  # Hawaii Stte FIP
+hawaii_state_fip <- 15
+
+  # PR State FIP
+pr_state_fip <- 72
+
+  # Tidycensus dummy variable
+tidycensus_dummy <- "B01001_001"
+
+# solution-begin
+  # Save answers
+SAVE_ANSWERS <- TRUE
+# solution-end
+
+#===============================================================================
+
+# Files
+
+  # Read in answers
+if (str_length(file_answers) > 0) {
+  answers <- read_rds(file_answers) 
+}
+
+  # Set census API key for tidycensus use
+census_api_key(census_key)
+
+#--- uncomment lines below once you input proper filepaths above
+
+  # Read in county level outcomes
+county_outcomes_ez <- read_csv(county_outcomes_ez_file)
+
+  # Read in census tract level outcomes
+ct_outcomes_ez <- read_csv(ct_outcomes_ez_file)
+
+#---
+```
+
+#===============================================================================
+
+## Introduction
+
+This challenge is based off of work and data from the Opportunity Atlas, a project headed by Raj Chetty et. al.  The work has sparked policy considerations regarding the possibility of moving people into affordable, high-mobility neighborhoods in hopes it would lead them to better social outcomes. You can find links to the the original paper, interactive map, data, and a NYT article below. Check them out to familiarize yourself with the info!
+
+* Paper: https://opportunityinsights.org/wp-content/uploads/2018/10/atlas_paper.pdf
+
+* Interactive Map: https://www.opportunityatlas.org/
+
+* Data: https://opportunityinsights.org/data/?geographic_level=0&topic=0&paper_id=1652#resource-listing
+
+* Press Articles: https://opportunityinsights.org/press-paper/the-opportunity-atlas-mapping-the-childhood-roots-of-social-mobility/
+
+The goal of this challenge is to explore some key mobility outcomes for an area of your choosing, such as income, incarceration, and teen pregnancy.  For the sake of simplicity, you won't be able to explore areas outside of the continental United States, nor can you explore Washington D.C. as it's special designation makes it difficult with the tools we have.
+
+**Disclaimer:** The challenge below may appear a bit wordy, but it is meant to be highly guided and used as a relatively painless learning experience.
+
+#===============================================================================
+
+## Downloading Mobility Data & Tidycensus Setup
+
+#### Reading in data
+
+To begin, we must read in the data.  For simplicity, the bulk of the processing has done for you.  Go to the box folder for this challenge's data - [https://stanford.box.com/s/uafg88ya77as4zuf02bq6ehjif5yvbys] - and download the data to someplace on your computer that is not your personal repo.  You should download the following files for this challenge:
+
+* `county_outcomes_ez.csv`
+
+* `ct_outcomes_ez.csv`
+
+* `answers.rds`
+
+Then locate the files, and copy their filepaths to the corresponding parameters above.  Once you've done this, uncomment and run the lines above in **Setup** that read in the csv files.
+
+#### Your census API key
+
+In this challenge, we'll use the tidycensus package, developed by Kyle Walker.  You can read up on it here - https://walkerke.github.io/tidycensus/articles/basic-usage.html.  The package allows quick and easy access to census data by giving you a series of functions which take basic information such as the geography you wish to gather data for, the state, location, and several other parameters.  
+
+To use this, you must create a census API key.  You can easily do this using the following link -  http://api.census.gov/data/key_signup.html.  Once you have your key, copy and paste it into the `census_key` parameter above.  Uncomment the line "census_api_key" line and run it.  This will install the key onto your computer for future use.
+
+#===============================================================================
+
+## Gathering Data
+
+#### Gathering shapefiles with tidycensus
+
+In this section, we'll use the tidycensus function `get_acs()` to gather the shapefiles for the region you're interested in.  Take a look at the documentation for the function to familiarize yourslf. Pay special attention to the `geography`, `state`, `county`, `geometry`.  You can also take a look at the **Geography in tidycensus** section here - https://walkerke.github.io/tidycensus/articles/basic-usage.html#geography-in-tidycensus. We have a few options for the scope of our search:
+
+* The entire nation by county
+
+  + By census tract is possible but not recommended due to processing time*
+
+* A given state by county
+
+* A given state by census tract
+
+* A given county by census tract
+
+* Along with many more if interested...
+
+__q1__ In the chunks below, use `get_acs()` to return the specified shapefiles...
+
+__q1.1__ Return the county shapefiles for New York state as the variable `q1.1`
+
+* Hints:
+  + Our mobility data contains fips codes for the year 2010 meaning you should gather the corresponding year's shapefiles to ensure compatibility.
+  + `get_acs()` requires you pass in a census variable name for it to retrieve, such as "total population", however since we only care about the shapefiles, we'll use a dummy variable given above as `tidycensus_dummy`.
+  + If you wish to gather the shapefiles for a given region, you do not neccessarilly have to supply a `state`, or `county`.  See the **Geography in tidycensus** section here - https://walkerke.github.io/tidycensus/articles/basic-usage.html#geography-in-tidycensus - to learn about the regions each `geography` is available by.
+  
+```{r q1.1 county shapefiles by state for New York}
+# solution-begin
+q1.1 <- 
+  get_acs(
+    geography = "county",
+    state = "New York",
+    geometry = TRUE, 
+    variables = tidycensus_dummy, 
+    year = 2010
+  )
+# solution-end
+
+# Print results
+if (exists("q1.1")) q1.1
+# task-begin
+
+# Compare result with answer
+#if (exists("q1.1")) compare(answers$q1.1, q1.1)
+# task-end
+```
+
+__q1.2__ Return the census tract shapefiles for New York county in New York state as the variable `q1.2`
+  
+```{r q1.2 tract shapefiles by state and county for New York County, New York}
+# solution-begin
+q1.2 <- 
+  get_acs(
+    geography = "tract",
+    state = "New York",
+    county = "New York",
+    geometry = TRUE, 
+    variables = tidycensus_dummy, 
+    year = 2010
+  )
+# solution-end
+
+# Print results
+if (exists("q1.2")) q1.2
+# task-begin
+
+# Compare result with answer
+#if (exists("q1.2")) compare(answers$q1.2, q1.2)
+# task-end
+```
+
+__q1.3__ Next, let's gather the data that you'll map later on.
+
+Gather the county shapefiles for your home state and save them into a variable named `my_state_bounds`.
+
+Next, gather the census tract shapefiles for your home county and save them into a variable named `my_county_bounds`.
+
+For those who call home outside the U.S., choose an area of interest.  In particular, gather the county shapefiles for a given state, and the census tract shapefiles for a given county within that state, saving both in the variables given above.
+
+```{r gather shapefiles for Santa Clara County, California}
+# solution-begin
+my_state_bounds <- 
+  get_acs(
+    geography = "county",
+    state = "California",
+    geometry = TRUE, 
+    variables = tidycensus_dummy, 
+    year = 2010
+  )
+
+my_county_bounds <-
+  get_acs(
+    geography = "tract",
+    state = "California",
+    county = "Santa Clara",
+    geometry = TRUE, 
+    variables = tidycensus_dummy, 
+    year = 2010
+  )
+# solution-end
+```
+
+#### Transforming the projections and creating fips codes
+
+The next step in the process is to join the shapefile data with the corresponding mobility data.  Before we can properly do that however, we must alter the geometry projections of our shapefiles to the US_ALBERS projections provided above and complete one other step...
+
+__q2__ Use `glimpse()` to peek at shapefiles in `q1.1`.  Keeping in mind that we'll need to join our data using the `state`, `county` and `tract` fips codes, what do you notice about the `q1.1` data?
+
+<!-- solution-begin -->
+* The `q1.2` shapefile data does not contain any of the `state`, `county` or `tract` level fips codes, however it does contain a `GEOID` variable that we can use to manually create the needed fips codes.
+
+<!-- solution-end -->
+Parsing the required data could be a bit tedious, so I've supplied a useful function called `transform_geo()` which will change the projection and parse the `GEOID` into what we need.  Take a peek at the function below to gain an understanding and then use it to transform each of `q1.1`, `q1.2`, `my_county_bounds`, and `my_state_bounds`.  Save each back into their original variable.  In total, this should take no more than 4 lines of code (assuming you pipe inline).
+
+```{r transform geo function}
+transform_geo <- function(geo_bounds) {
+  
+  geo_bounds %>% 
+    st_transform(US_ALBERS) %>% 
+    mutate(
+      state = as.integer(str_extract(GEOID, "^\\d{2}")),
+      county = as.integer(str_extract(GEOID, "(?<=\\d{2})\\d{3}")),
+      tract = as.integer(str_extract(GEOID, "\\d{6}$"))
+    ) %>% 
+    filter(
+      state != alaska_state_fip, 
+      state != hawaii_state_fip, 
+      state != pr_state_fip
+    )
+}
+```
+
+```{r transform shapefiles}
+# solution-begin
+q2.1 <- q1.1 %>% transform_geo()
+
+q2.2 <- q1.2 %>% transform_geo()
+
+my_county_bounds <- my_county_bounds %>% transform_geo()
+
+my_state_bounds <- my_state_bounds %>% transform_geo()
+# solution-end
+```
+
+#### Joining shapefile data with mobility data
+
+Now that our shapefiles are properly situated let's join them to our data. In order to join the data, we'll have to handle it differently depending on which level the shapefiles are.  For instance, the county-level data will have to be joined using both the `state` and `county` fips variables, whereas the tract-level data will also make use of the `tract` fips identifier.
+
+__q3__ Using the `county_outcomes_ez` and `ct_outcomes_ez` (ct = census tract) mobility data, create the proper joined dataset for each of the 4 regions we have collected data for thus far.  Keep in mind that our mobility data has information for all counties and census tracts, respectively, and that we only want to keep the subset which belongs to the region we have shapefiles for.
+
+__q3.1__ Join together the q2.1 shapefile data with its corresponding mobility data using the proper fips codes. Store the new table in the variable `q3.1`
+
+```{r join q1.1 shapefile data with outcomes}
+# solution-begin
+q3.1 <-
+  q1.1 %>% 
+  left_join(
+    county_outcomes_ez,
+    by = c("state", "county")
+  )
+# solution-end
+
+# Print results
+if (exists("q3.1")) q3.1
+# task-begin
+
+# Compare result with answer
+#if (exists("q3.1")) compare(answers$q3.1, q3.1)
+# task-end
+```
+
+__q3.2__ Join together the q2.2 shapefile data with their corresponding mobility data using the proper fips codes. Store the new table in the variable `q3.2`
+
+```{r join q1.2 shapefile data with outcomes}
+# solution-begin
+q3.2 <-
+  q1.2 %>% 
+  left_join(
+    ct_outcomes_ez,
+    by = c("state", "county", "tract")
+  )
+# solution-end
+
+# Print results
+if (exists("q3.2")) q3.2
+# task-begin
+
+# Compare result with answer
+#if (exists("q3.2")) compare(answers$q3.2, q3.2)
+# task-end
+```
+
+__q3.3__ Do the same for your personal shapefile data, except this time, save the data for each of `my_state_bounds` and `my_county_bounds` back into the original variables.  We'll then use this data in the next challenge for mapping!
+
+Once you have joined it, feel free to sift through it and see what it looks like.  You should have boundary and shapefile/geometry information for each observation, as well as related outcomes for that observation.
+
+```{r joining personal shapefile data}
+# solution-begin
+my_state_bounds <-
+  my_state_bounds %>% 
+  left_join(
+    county_outcomes_ez,
+    by = c("state", "county")
+  )
+
+my_county_bounds <-
+  my_county_bounds %>% 
+  left_join(
+    ct_outcomes_ez,
+    by = c("state", "county", "tract")
+  )
+# solution-end
+```
+
+#===============================================================================
+#===============================================================================
+
+## Automatically generating your C01 files
+
+For your C01, you will need to produce a challenge.Rmd file and a solution.Rmd file. By using this master.Rmd file and following the conventions below, you can automatically generate these files by following these instructions:
+
+* From the terminal navigate to this directory, and execute the following command
+
+        % make
+
+* The above should create a challenge.Rmd file a solution.Rmd file.
+* From RStudio, knit solution.Rmd. If you have included the necessary lines, it will generate an RDS file with answers.
+* From RStudio, knit challenge.Rmd.
+* Whenever you make a change to master.Rmd, simply follow the above steps again to update challenge.Rmd, solution.Rmd, and answers, if any.
+
+## Conventions
+
+To use this template, you simply need to follow a few simple conventions.
+
+<!-- task-begin -->
+For text that is to appear only in the challenge, put between the lines above and below.
+<!-- task-end -->
+
+<!-- solution-begin -->
+For text that is to appear only in the solution, put between the lines above and below.
+<!-- solution-end -->
+
+Any text that does not appear between the lines above will appear in both the challenge and the solution.
+
+There is a similar convention for chunks.
+
+```{r}
+# task-begin
+# For code that is to appear only in the challenge, put between the lines above
+# and below.
+# task-end
+
+# solution-begin
+# For code that is to appear only in the solution, put between the lines above
+# and below.
+# solution-end
+
+# Any code that does not appear between the lines above will appear in both the
+# challenge and the solution.
+```
+
+
+## Example question
+
+__q1__ Use R to get the timezone.
+
+```{r}
+# solution-begin
+q1 <- Sys.timezone()
+# solution-end
+
+# Print results
+if (exists("q1")) q1
+# task-begin
+
+# Compare result with answer
+if (exists("q1")) compare(answers$q1, q1)
+# task-end
+```
+
+
+<!-- solution-begin -->
+## Answers
+
+To create an RDS file with answers, save all of your solutions in variables such as `q1`, `q2.1`, etc. The following code will create an answer file when you knit the solution.Rmd file. You specify where the answer file is saved using the `file_answers` variable in the parameters.
+
+To provide answers, set `eval=TRUE` in the chunk below.
+If you will not be providing answers, simply delete the following lines.
+
+Save answers.
+
+```{r, eval=TRUE}
+if (SAVE_ANSWERS) {
+  ls(pattern = "^q[1-9][0-9]*(\\.[1-9][0-9]*)*$") %>%
+    str_sort(numeric = TRUE) %>% 
+    set_names() %>% 
+    map(get) %>%
+    discard(is.ggplot) %>%
+    write_rds(file_answers)
+}
+```
+<!-- solution-end -->

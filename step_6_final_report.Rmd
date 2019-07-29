@@ -1,0 +1,1428 @@
+---
+title: "Final report"
+author: "Michael"
+date: 2019-03-08
+output: 
+  html_document:
+    toc: true
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Setup
+
+```{r load libraries and workspace, message=FALSE, warning=FALSE}
+# Libraries
+library(tigris)
+options(tigris_class = "sf")
+options(tigris_use_cache = TRUE)
+library(sf)
+library(tidycensus)
+library(tmap)
+library(tmaptools) 
+library(shinyjs)
+library(tidyverse)
+library(ggrepel)
+
+census_api_key("891e70ea96814a52b3992d4f85fd4fb500721349")
+
+# Parameters
+
+## File paths===================================================================
+
+# file path for joined commuting zone data
+cz_data_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cz_data.csv"
+
+# file path for joined county data
+county_data_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\county_data.csv"
+
+# file with joined census tract data
+ct_data <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\ct_data.csv"
+
+# file path with tidy national percentile outcome
+national_outcomes_tidy_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\national_percentile_outcomes_tidy.csv"
+
+# file path with percentile to dollar crosswalk
+crosswalk_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\pctile_to_dollar_cw.csv"
+
+# File for state borders
+file_state_borders <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\cb_2017_us_state_20m_sf.rds"
+
+# File for county borders
+file_county_borders <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\cb_2017_us_county_20m_sf.rds"
+
+## Values=======================================================================
+
+# Albers projection for 48 contiguous US states
+US_ALBERS <- "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=37.5 +lon_0=-96 +x_0=0 +y_0=0 +datum=WGS84 +no_defs"
+
+# Alaska state FIP
+alaska_state_fip <- 2
+
+# Hawaii state FIP
+hawaii_state_fip <- 15
+
+# PR state FIP
+pr_state_fip <- 72
+
+# Atlas colors
+atlas_colors <- c("#9a212f", "#9a212f", "#ffffc9", "#31677e", "#31677e")
+
+# Atlas NA color
+atlas_na_color <- "#d1d1d0"
+
+# Race/Ethnicities
+races <- c("Black", "White", "Asian", "Hispanic")
+
+# Race colors
+race_colors <- 
+  c(
+    "White" = "darkblue", 
+    "Hispanic" = "orange", 
+    "Black" = "maroon", 
+    "Asian" = "darkgreen"
+  )
+
+## Data=========================================================================
+
+cz_data <- read_csv(cz_data_file)
+
+county_data <- read_csv(county_data_file)
+
+ct_data <- read_csv(ct_data)
+
+national_percentile_outcomes <- read_csv(national_outcomes_tidy_file)
+
+# Major cities
+major_cities_fips <- tibble(
+  city = 
+    c(
+      "Chicago", 
+      "Los Angeles", 
+      "San Francisco", 
+      "Oakland", 
+      "Phoenix", 
+      "Louisville"
+    ),
+  state = c(17, 06, 06, 06, 04, 21),
+  state_chr = c("17", "06", "06", "06", "04", "21"),
+  county = c(031, 037, 075, 001, 013, 111),
+  county_chr = c("031", "037", "075", "001", "013", "111"),
+  FIPS = c(17031, 06037, 06075, 06001, 04013, 21111)
+)
+
+focus_areas <- tibble(
+  city = c(
+    "Brownsville, TX",
+    "Austin, TX",
+    "Fredericksburg, VA",
+    "Cape Coral, FL",
+    "Phoenix, AZ",
+    "Minneapolis, MN",
+    "Seattle, WA",
+    "Houston, TX",
+    "Denver, CO"
+  ),
+  state = c(48, 48, 51, 12, 04, 27, 53, 48, 08),
+  state_chr = c("48", "48", "51", "12", "04", "27", "53", "48", "08"),
+  county = c(215, 015, 630, 071, 013, 053, 033, 225, 031),
+  county_chr = c("215", "015", "630", "071", "013", "053", "033", "225", "031"),
+  FIPS = c(48215, 48015, 51630, 12071, 04013, 27053, 53033, 48225, 08031)
+)
+
+# State mapping borders
+state_borders <- 
+  read_rds(file_state_borders) %>% 
+  filter(!(NAME %in% c("Alaska", "Hawaii"))) %>% 
+  st_transform(US_ALBERS)
+```
+
+## Data Manipulation and Cleaning
+
+```{r join together data from each level, eval=FALSE}
+county_data <- 
+  county_cov %>%
+  left_join(county_outcomes_ez, by = c("state", "county")) %>% 
+  rename(
+    "job_growth_rate" = "ann_avg_job_growth_2004_2013",
+    "employment_rate" = "emp2000",
+    "prop_foreign_born" = "foreign_share2010",
+    "prop_college_educated" = "frac_coll_plus2010",
+    "wage_growth" = "ln_wage_growth_hs_grad",
+    "prop_non_white" = "nonwhite_share2010",
+    "prop_poor" = "poor_share2010",
+    "rent_two_bed" = "rent_twobed2015",
+    "prop_black" = "share_black2010",
+    "prop_asian" = "share_asian2010",
+    "prop_hisp" = "share_hisp2010",
+    "pop_density" = "popdensity2010"
+  ) %>% 
+  select(
+    -ends_with("_p25"),
+    -ends_with("1990"),
+    -ends_with("2000"),
+    -ends_with("2010"),
+    -ends_with("2013"),
+    -ends_with("2016")
+  )
+
+cz_data <-
+  cz_cov %>% 
+  left_join(cz_outcomes_ez, by = c("cz", "czname")) %>% 
+  rename(
+    "job_growth_rate" = "ann_avg_job_growth_2004_2013",
+    "job_growth_rate_two_decades" = "job_growth_1990_2010",
+    "employment_rate" = "emp2000",
+    "prop_foreign_born" = "foreign_share2010",
+    "prop_college_educated" = "frac_coll_plus2010",
+    "wage_growth" = "ln_wage_growth_hs_grad",
+    "prop_non_white" = "nonwhite_share2010",
+    "prop_poor" = "poor_share2010",
+    "rent_two_bed" = "rent_twobed2015",
+    "prop_black" = "share_black2010",
+    "prop_asian" = "share_asian2010",
+    "prop_hisp" = "share_hisp2010",
+    "pop_density" = "popdensity2010"
+  ) %>% 
+  select(
+    -ends_with("_p25"),
+    -ends_with("1990"),
+    -ends_with("2000"),
+    -ends_with("2010"),
+    -ends_with("2013"),
+    -ends_with("2016"),
+    -wrluri
+  )
+
+write_csv(
+  cz_data, 
+  "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cz_data.csv"
+)
+
+ct_data <-
+  ct_outcomes_ez %>% 
+  left_join(ct_cov, by = c("state", "county", "tract")) %>% 
+  rename(
+    "job_growth_rate" = "ann_avg_job_growth_2004_2013",
+    "employment_rate" = "emp2000",
+    "prop_foreign_born" = "foreign_share2010",
+    "prop_college_educated" = "frac_coll_plus2010",
+    "wage_growth" = "ln_wage_growth_hs_grad",
+    "prop_non_white" = "nonwhite_share2010",
+    "prop_poor" = "poor_share2010",
+    "rent_two_bed" = "rent_twobed2015",
+    "prop_black" = "share_black2010",
+    "prop_asian" = "share_asian2010",
+    "prop_hisp" = "share_hisp2010",
+    "high_paying_jobs" = "jobs_highpay_5mi_2015",
+    "reach_top_20_household_income" = "kfr_top20_pooled_pooled_p25",
+    "reach_top_20_individual_income" = "kir_top20_pooled_pooled_p25",
+    "move_out_of_poverty" = "lpov_nbh_pooled_pooled_p25",
+    "pop_density" = "popdensity2010"
+  ) %>% 
+  select(
+    -ends_with("_p25"),
+    -ends_with("1990"),
+    -ends_with("2000"),
+    -ends_with("2010"),
+    -ends_with("2013"),
+    -ends_with("2015")
+  )
+
+national_percentile_outcomes <-
+  national_percentile_outcomes %>% 
+  select(
+    -starts_with("imp_"),
+    -starts_with("count_"),
+    -ends_with("_n"),
+    -contains("comcoll"),
+    -contains("has_"),
+    -contains("hours_wk"),
+    -contains("24"),
+    -contains("26"),
+    -contains("29"),
+    -contains("32"),
+    -contains("_staycz"),
+    -contains("_top01"),
+    -contains("marr_\\d{2}"),
+    -contains("pos_hours"),
+    -contains("somecoll"),
+    -contains("spouse_rk"),
+    -contains("stayhome"),
+    -contains("staytract"),
+    -contains("two_par"),
+    -contains("wgflx_rk"),
+    -contains("work")
+  ) %>% 
+  gather(
+    key = variable, value = prop, kfr_pooled_pooled:s_jail_white_pooled
+  ) %>% 
+  separate(
+    col = variable, into = c("variable", "gender"), sep = "_(?=[:alpha:]+$)"
+  ) %>% 
+  separate(
+    col = variable, into = c("variable", "race"), sep = "_(?=[:alpha:]+$)"
+  ) %>% 
+  mutate(
+    fitted_value = ifelse(str_detect(variable, "^s_"), TRUE, FALSE),
+    variable = 
+      ifelse(
+        str_detect(variable, "^s_"), 
+        str_sub(variable, start = 3L, end = -1L), 
+        variable
+      )
+  ) %>% 
+  mutate(
+    outcome = 
+      recode(
+        outcome,
+        proginc = "recieve_assistance income",
+        hs = "educated_hs",
+        kir_stycz = "no_move_ind_income",		
+        kfr_stycz	= "no_move_household_income",			
+        staycz = "stayed_in_cz", 		
+        lpov_nbh = "move_out_of_poverty",			
+        grad = "educated_graduate",				
+        kir_native = "ind_income_native_mother",				
+        kir_imm = "ind_income_immigrant_mother",
+        kfr = "household_income",				
+        kir = "individual_income",				
+        jail = "prop_incarcerated_men",				
+        married = "prop_married",				
+        kir_top20 = "reach_top_20_individual_income",				
+        kfr_top20 = "reach_top_20_household_income",				
+        teenbrth = "prop_teen_birth",				
+        coll = "educated_bachelors",				
+        kfr_native = "household_income_native_mother",				
+        kfr_imm = "household_income_immigrant_mother"
+      )
+  )
+```
+
+```{r re_format national data for plotting,}
+national_percentile_outcomes <-
+  national_percentile_outcomes %>% 
+  mutate_at(vars(race, gender), str_to_title) %>% 
+  mutate(
+    race = 
+      recode(
+        race, 
+        "Hisp" = "Hispanic",
+        .default = race
+      )
+  )
+```
+
+## Functions
+
+### Functions to Set Colors
+
+```{r tmap color scaling function}
+color_values_tmap_ct <- function(small_tracts, outcome) {
+  
+  vals <-
+    c(
+      quantile(small_tracts[[outcome]], 0, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .025, na.rm = TRUE) + .00001,
+      median(small_tracts[[outcome]], na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .975, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], 1, na.rm = TRUE)
+    ) 
+  
+  vals
+  
+}
+```
+
+```{r tmap reverse colors if needed}
+rev_colors <- function(rev_scale) {
+  
+  if (rev_scale == 1) return(rev(atlas_colors))
+  
+  atlas_colors
+  
+}
+```
+
+### Functions to Create Labels
+
+```{r legend title generator}
+legend_generator <- function(outcome) {
+  
+  case_when(
+    outcome == "household_income"
+    ~ "Children's mean\nhousehold income\npercentiles as\nadults",
+    str_detect(outcome, "incarceration")
+    ~ "% of male adults incarcerated\non April 1st, 2010",
+    outcome == "teen_birth"
+    ~ "% of adults who had a\nteen pregnancy",
+    outcome == "rent_two_bed"
+    ~ "Median rent for two-bedroom\nhousing units (in $)",
+    outcome == "employment_rate"
+    ~ "Mean employment rate",
+    outcome == "wage_growth"
+    ~ "Mean wage growth",
+    str_detect(outcome, "bachelor")
+    ~ "Proportion with\nbachelor's degrees",
+    outcome == "prop_college_educated"
+    ~ "Proportion of adults\nwith a college degree",
+    outcome == "move_out_of_poverty"
+    ~ "Proportion that move\ninto wealthier area",
+    outcome == "prop_non_white"
+    ~ "Proportion of residents\nnon-White",
+    TRUE ~ "Outcome Proportion"
+  )
+  
+}
+```
+
+### Functions to Find & Download Data
+
+```{r function to find state or county shapefile data}
+# Geography either "county" or "tract"
+# For tract level, MUST specify at least the state
+
+county_tract_bounds <- function(geography, state, county) {
+  
+  bounds <-  
+    get_acs(
+      geography = geography,
+      state = state,
+      county = county,
+      geometry = TRUE, 
+      variables = "B01001_001", 
+      year = 2010
+    ) %>% 
+    transform_geo()
+  
+  if (geography == "county") {
+    return(
+      left_join(
+        bounds, 
+        county_data,
+        by = c("state", "county")
+      )
+    )
+  }
+  
+  if (geography == "tract") {
+    return(
+      left_join(
+        bounds, 
+        ct_data,
+        by = c("state", "county", "tract")
+      )
+    )
+  }
+  
+}
+```
+
+```{r function to transform projection and mutate fips}
+transform_geo <- function(geo_bounds) {
+  
+  geo_bounds %>% 
+    st_transform(US_ALBERS) %>% 
+    mutate(
+      state = as.integer(str_extract(GEOID, "^\\d{2}")),
+      county = as.integer(str_extract(GEOID, "(?<=\\d{2})\\d{3}")),
+      tract = as.integer(str_extract(GEOID, "\\d{6}$"))
+    ) %>% 
+    filter(
+      state != alaska_state_fip, 
+      state != hawaii_state_fip, 
+      state != pr_state_fip
+    )
+}
+```
+
+### Functions to Map Data
+
+```{r generate tmap for given region}
+generate_tmap <- function(bounds, outcome, rev_scale) {
+  
+  tm_basemap(leaflet::providers$Stamen.TonerLite) +
+    tm_shape(bounds) +
+    tm_polygons(
+      col = outcome, 
+      breaks = color_values_tmap_ct(bounds, outcome),
+      style = "cont",
+      palette = rev_colors(rev_scale),
+      contrast = c(0, 0.9),
+      alpha = .8,
+      colorNA = atlas_na_color,
+      id = "NAME",
+      border.alpha = .2,
+      title = legend_generator(outcome)
+    ) +
+    tm_layout(
+      frame = FALSE,
+      legend.outside = TRUE,
+      legend.outside.position = "right",
+      legend.width = Inf,
+      legend.title.size = .7,
+      title.position = c("center", "BOTTOM")
+    )
+  
+}
+```
+
+```{r make a tmap for given parameters}
+tmap_region <- function(geography, state = NULL, county = NULL, outcome, rev_scale = 0) {
+  
+  generate_tmap(
+    county_tract_bounds(geography, state, county), 
+    outcome,
+    rev_scale
+  )
+  
+}
+```
+
+# Background To Project
+
+**Economic and social opportunities are essential to socio-economic mobility across the United States.  Various determinants of mobility, such as education, income, incarceration, and housing costs vary widely across the nation.  Research done by Raj Chetty, et. al and other scholars indicates that the place you grow up can play a huge role in how these mobility opportunities surface and play out in in your adulthood.  The research suggest that some areas have higher mobility opportunities than others, and further, that it may be possible to produce better outcomes for individuals by relocating them to areas which are richer in opportunity.**
+
+**This project dives deeper into this idea by exploring how certain socio-economic measures like those listed above vary across the nation and within smaller regions.  Further, the project looks to identify and explore key "Mobility Hotspots" - areas which I believe are ripe for providing mobility opportunities.  Below, you can find additional guiding questions to help you through the project.**
+
+# Guiding Questions
+
+### Exploring Variance in Individual Outcomes Across Income and Race
+
+* How do various mobility outcomes vary by the financial and racial background an individual comes from?  In particular, how do the following vary:
+
+  + Male incarceration rates
+  
+  + Income levels
+  
+  + Education levels &
+  
+  + Socio-economic mobility opportunities
+
+### Variance in Individual Socio-Economic Mobility by Geographic Characteristics
+
+* How do an individual's socio-economic mobility opportunities vary with various geographic characteristics.  For instance, how are mobility opportunities related to: 
+
+  + An area's cost-of-living &
+  
+  + An area's economic growth
+
+### Potential for Geographic Relocation to Positively Affect Socio-Economic Mobility
+
+* Are there particular regions or cities that offer promising mobility opportunities such as higher incomes and education levels, while maintaining low barriers to entry?
+
+  + If so, what characterizes these regions?
+  
+  + Where do they exist geographically?
+
+# Exploring Mobility Across the Nation
+
+## National Trends
+
+### How do basic mobility measures vary across race, gender, parental wealth, & ethnicity?
+
+```{r adulthood household income rank vs parental household income rank by race}
+national_percentile_outcomes %>% 
+  filter(
+    outcome == "household_income", 
+    fitted_value == TRUE, 
+    gender == "Pooled",
+    race %in% races
+  ) %>% 
+  mutate(race = fct_reorder(race, prop, .desc = TRUE)) %>% 
+  ggplot(aes(par_pctile, prop, color = race)) +
+  geom_line(size = rel(1.5)) +
+  scale_y_continuous(
+    breaks = seq(.3, .7, by = .1),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    labels = scales::number_format(accuracy = 1, suffix = "th")
+  ) +
+  scale_color_manual(
+    values = race_colors
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray89")
+  ) +
+  labs(
+    title = "Household Income Percentile by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nhigher income households as adults.",
+    x = "Parental Household Income Percentile",
+    y = "Children's Mean Household Income Percentile\nAs Adults (Ages 31-37)\n",
+    color = "Race/Ethnicity",
+    caption = "Source: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r adulthood ind income rank vs parental household income rank by race and gender}
+national_percentile_outcomes %>% 
+  filter(
+    outcome == "individual_income", 
+    fitted_value == TRUE, 
+    gender == c("Male", "Female"),
+    race %in% races
+  ) %>% 
+  mutate(
+    race = fct_reorder(race, prop, .desc = TRUE),
+    gender = fct_reorder(gender, prop, .desc = TRUE)
+  ) %>% 
+  ggplot(aes(par_pctile, prop, color = race)) +
+  geom_line(aes(linetype = gender), size = rel(1)) +
+  scale_y_continuous(
+    breaks = seq(.3, .7, by = .1),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    labels = scales::number_format(accuracy = 1, suffix = "th")
+  ) +
+  scale_color_manual(
+    values = race_colors
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray89")
+  ) +
+  labs(
+    title = "Individual Income Percentile by Race, Ethnicity, & Sex",
+    subtitle = "Across all races - except blacks - males make more than females.",
+    x = "Parental Household Income Percentile",
+    y = "Children's Mean Household Income Percentile\nAs Adults (Ages 31-37)\n",
+    color = "Race/Ethnicity",
+    linetype = "Sex",
+    caption = "Source: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r adulthood incarceration rates vs parental household income rank by race}
+national_percentile_outcomes %>% 
+  filter(
+    outcome == "prop_incarcerated_men", 
+    fitted_value == TRUE, 
+    gender == "Pooled",
+    race %in% races
+  ) %>% 
+  mutate(race = fct_reorder(race, prop, .desc = TRUE)) %>% 
+  ggplot(aes(par_pctile, prop, color = race)) +
+  geom_line(size = rel(1.5)) +
+  scale_y_continuous(
+    breaks = seq(0, .2, by = .025),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = .1)
+  ) +
+  scale_x_continuous(
+    labels = scales::number_format(accuracy = 1, suffix = "th")
+  ) +
+  scale_color_manual(
+    values = race_colors
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray89")
+  ) +
+  labs(
+    title = "Male Incarceration Rates by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have lower\nincarceration rates as adults, yet blacks have disproportionately higher incarceration rates\nthan other races.",
+    x = "Parental Household Income Percentile",
+    y = "% of Men Incarcerated on April 1, 2010\n(Ages 27-32)\n",
+    color = "Race/Ethnicity",
+    caption = "Source: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r HS completion rates vs parental household income}
+national_percentile_outcomes %>% 
+  filter(
+    outcome == "educated_hs", 
+    fitted_value == TRUE, 
+    gender == "Pooled",
+    race %in% c("White", "Hispanic", "Black")
+  ) %>% 
+  mutate(race = fct_reorder(race, prop, .desc = TRUE)) %>% 
+  ggplot(aes(par_pctile, prop, color = race)) +
+  geom_line(size = rel(1.5)) +
+  scale_y_continuous(
+    breaks = seq(.5, 1, by = .05),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    labels = scales::number_format(accuracy = 1, suffix = "th")
+  ) +
+  scale_color_manual(
+    values = race_colors
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray89")
+  ) +
+  labs(
+    title = "National High School Completion Rates by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nhigher high school completion rates.",
+    x = "Parental Household Income Percentile",
+    y = "Children's High School Completion Rates\n",
+    color = "Race/Ethnicity",
+    caption = "Source: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r Bachelors vs parental household income}
+national_percentile_outcomes %>% 
+  filter(
+    outcome == "educated_bachelors", 
+    fitted_value == TRUE, 
+    gender == "Pooled",
+    race %in% races
+  ) %>% 
+  mutate(race = fct_reorder(race, prop, .desc = TRUE)) %>% 
+  ggplot(aes(par_pctile, prop, color = race)) +
+  geom_line(size = rel(1.5)) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .1),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    labels = scales::number_format(accuracy = 1, suffix = "th")
+  ) +
+  scale_color_manual(
+    values = race_colors
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray89")
+  ) +
+  labs(
+    title = "National College Completion Rates by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nhigher college completion rates.",
+    x = "Parental Household Income Percentile",
+    y = "Children's College Completion Rates\n",
+    color = "Race/Ethnicity",
+    caption = "Source: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r upward mobility top quintile vs parental household income rank by race}
+national_percentile_outcomes %>% 
+  filter(
+    outcome == "reach_top_20_household_income", 
+    fitted_value == TRUE, 
+    gender == "Pooled",
+    race %in% races
+  ) %>% 
+  mutate(race = fct_reorder(race, prop, .desc = TRUE)) %>% 
+  ggplot(aes(par_pctile, prop, color = race)) +
+  geom_line(size = rel(1.5)) +
+  scale_y_continuous(
+    breaks = seq(0, .7, by = .1),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    labels = scales::number_format(accuracy = 1, suffix = "th")
+  ) +
+  scale_color_manual(
+    values = race_colors
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray89")
+  ) +
+  labs(
+    title = "Upward Mobility by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nhigher chances of moving up in wealth.",
+    x = "Parental Household Income Percentile",
+    y = "Probability of an Indivdual Reaching the Top\nQuintile of National Household Incomes\n",
+    color = "Race/Ethnicity",
+    caption = "Source: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r mobility rate by median rent Nationwide}
+ct_data %>%  
+  filter(
+    !is.na(rent_two_bed), 
+    !is.na(move_out_of_poverty),
+    rent_two_bed > 400,
+    rent_two_bed < 2600
+  ) %>% 
+  ggplot(aes(rent_two_bed, move_out_of_poverty)) +
+  geom_hline(
+    aes(yintercept = mean(move_out_of_poverty, na.rm = TRUE)),
+    linetype = 2
+  ) +
+  geom_boxplot(aes(group = cut_width(rent_two_bed, 200)), varwidth = TRUE) +
+  geom_smooth(method = "loess", se = FALSE, color = "maroon") +
+  scale_y_continuous(
+    breaks = seq(0, .9, by = .1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(400, 2500, by = 300),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  labs(
+    title = "Mobility Into Wealthier Areas vs. Cost of Living Across the Nation",
+    subtitle = "In many places, without paying any extra rent an individual could live in an area with\nbetter opportunites.",
+    x = "Median Two-Bedroom Rent",
+    y = "Proportion of Children Who Grew Up to Live\nIn an Area With a Poverty Rate of < 10%\n",
+    caption = "Source: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+**Insights**
+
+* Across all measures, an individual's financial background plays a huge role in determining their mobility opportunities, though for income measures, race also plays a noticeably big role, with blacks and Hispanics fairing worse.
+
+### How do basic mobility measures vary across the country?
+
+```{r}
+tmap_region(geography = "county", outcome = "rent_two_bed", rev_scale = 1) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(
+    main.title = "Median Rent for Two-Bedroom Housing Units",
+    title = "Highest housing costs on\ncalifornia and north east coasts.\n\nSource: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  ) +
+  tmap_mode("plot")
+```
+
+```{r}
+tmap_region(geography = "county", outcome = "household_income") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(
+    main.title = "National Household Income Percentiles for Children Who\nGrew Up in the Bottom Quartile",
+    title = "Poverty and low-incomes are most\nrampant in the American South.\n\nSource: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  ) +
+  tmap_mode("plot")
+```
+
+```{r interactive national @ county level income}
+tmap_region(geography = "county", outcome = "household_income") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(
+    main.title = "National Household Income Outcomes for Adults whose\nParents were in the Bottom 25th Percentile"
+  ) +
+  tmap_mode("view")
+```
+
+```{r}
+tmap_region(geography = "county", outcome = "prop_college_educated") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(
+    main.title = "Proportion of Adults with a College Degree",
+    title = "College education rates are low across\nthe country, but particularly so in\nimpoverished areas such as those above.\n\nSource: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  ) +
+  tmap_mode("plot")
+```
+
+```{r}
+tmap_region(geography = "county", outcome = "prop_non_white", rev_scale = 1) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(
+    main.title = "Proportion of Residents who are Non-White",
+    title = "Minorities typically live in the areas\nwith the least mobility opportunity.\n\nSource: The Opportunity Atlas:\nMapping the Childhood Roots of Social Mobility"
+  ) +
+  tmap_mode("plot")
+```
+
+**Insights**
+
+* Geographically, areas such as the south have the lowest income and education levels in the nation.  This is likely due to the racial systemic opression dating back decades and even centuries.  Low opportunity areas are also composed of higher proportions of minority residents, which contributes to the systemic lack of mobility among these groups, as many simply don't live in places conducive to better opportunities.
+
+## Regional/Metropolitan Trends
+
+### Which areas may be the most promising for socio-economic mobility opportunities?
+
+```{r mobility hotspot 1, fig.width=8, fig.height=8}
+cz_data %>% 
+  filter(job_growth_rate_two_decades > 0) %>% 
+  top_n(n = 100, wt = pop_density) %>% 
+  ggplot(aes(job_growth_rate_two_decades, rent_two_bed)) +
+  geom_vline(
+    aes(
+      xintercept = 
+        weighted.mean(job_growth_rate_two_decades, pop_density, na.rm = TRUE)
+    ),
+    linetype = 2,
+    data = cz_data
+  ) +
+  geom_hline(
+    aes(yintercept = weighted.mean(rent_two_bed, pop_density, na.rm = TRUE)),
+    linetype = 2,
+    data = cz_data
+  ) +
+  geom_point(aes(size = pop_density), shape = 21, alpha = .4, fill = "red") +
+  ggrepel::geom_text_repel(
+    aes(
+      label = czname,
+      size = ((1 / rent_two_bed) + job_growth_rate_two_decades) * 5
+    ),
+    direction = "both",
+    data = cz_data %>% 
+      filter(job_growth_rate_two_decades > 0) %>% 
+      top_n(n = 100, wt = pop_density) %>% 
+      filter(job_growth_rate_two_decades > 50),
+    point.padding = .3,
+    fontface = "bold"
+  ) +
+  annotate(
+    geom = "text",
+    label = c(
+      "Mean\nJob Growth Rate", 
+      "Austin, TX, & Brownsville, TX both\nappear to offer good mobility opportunities, along with select other areas", 
+      "Mean\nTwo-Bedroom Rent"
+    ),
+    angle = c(-90, 0, 0),
+    x = c(
+      weighted.mean(
+        cz_data$job_growth_rate_two_decades, cz_data$pop_density, na.rm = TRUE
+      ),
+      65,
+      85
+    ),
+    y = c(
+      1590, 
+      1600, 
+      weighted.mean(cz_data$rent_two_bed, cz_data$pop_density, na.rm = TRUE) - 
+        30
+    ),
+    size = 3
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 100, by = 10),
+    labels = scales::number_format(accuracy = 1, suffix = "%")
+  ) +
+  scale_y_continuous(
+    breaks = seq(600, 1600, by = 100),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  scale_size(range = c(.5, 15), breaks = c(300, 500, 1000, 2000, 5000)) +
+  theme_minimal() +
+  theme(
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Mobility Hotspots",
+    subtitle = "A commuting zone is considered a potentially good hotspot for socio-economic mobility if it has high\njob growth and accessible housing costs.",
+    x = "Job Growth Rate from 1990-2010",
+    y = "Median Rent for a Two-Bedroom Housing Unit",
+    caption = "Circles are sized relative to the zone's population density,\nand labels are sized relative to the zone's mobility potential.\n\nSource: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r mobility hotspot 2, fig.width=8, fig.height=8}
+cz_data %>% 
+  filter(job_growth_rate_two_decades > 0) %>% 
+  top_n(n = 100, wt = pop_density) %>% 
+  ggplot(aes(job_growth_rate_two_decades, household_income)) +
+  geom_vline(
+    aes(
+      xintercept = 
+        weighted.mean(job_growth_rate_two_decades, pop_density, na.rm = TRUE)
+    ),
+    linetype = 2,
+    data = cz_data
+  ) +
+  geom_hline(
+    aes(
+      yintercept = weighted.mean(household_income, pop_density, na.rm = TRUE)
+    ),
+    linetype = 2,
+    data = cz_data
+  ) +
+  geom_point(aes(size = pop_density), shape = 21, alpha = .4, fill = "red") +
+  ggrepel::geom_text_repel(
+    aes(
+      label = czname,
+      size = (household_income * 80 + job_growth_rate_two_decades) * 5
+    ),
+    direction = "both",
+    data = cz_data %>% 
+      filter(job_growth_rate_two_decades > 0) %>% 
+      top_n(n = 100, wt = pop_density) %>% 
+      filter(
+        job_growth_rate_two_decades > 16, household_income > .42
+      ),
+    point.padding = .3,
+    min.segment.length = .3,
+    fontface = "bold"
+  ) +
+  annotate(
+    geom = "text",
+    label = c(
+      "Mean\nJob Growth Rate", 
+      "Minneapolis, Seattle, Houston, & Denver all\nappear to offer good mobility opportunities",
+      "Mean\nIncome Percentile"
+    ),
+    angle = c(-90, 0, 0),
+    x = c(
+      weighted.mean(
+        cz_data$job_growth_rate_two_decades, 
+        cz_data$pop_density, 
+        na.rm = TRUE
+      ),
+      65,
+      60
+    ),
+    y = c(
+      .48,
+      .5,
+      weighted.mean(cz_data$household_income, cz_data$pop_density, na.rm = TRUE)
+    ),
+    size = 3
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 100, by = 10),
+    labels = scales::number_format(accuracy = 1, suffix = "%")
+  ) +
+  scale_y_continuous(
+    breaks = seq(.3, .55, by = .05),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_size(range = c(.5, 15), breaks = c(300, 500, 1000, 2000, 5000)) +
+  theme_minimal() +
+  theme(
+    legend.position = "none"
+  ) +
+  labs(
+    title = "Mobility Hotspots",
+    subtitle = "A commuting zone is considered a potentially good hotspot for socio-economic mobility if it has high\njob growth and high resulting incomes for those who grow up there.",
+    x = "Job Growth Rate from 1990-2010",
+    y = "Children's Mean Household Income Percentile\nAs Adults (Ages 31-37)\n",
+    caption = "Circles are sized relative to the zone's population density,\nand labels are sized relative to the zone's mobility potential.\n\nSource: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+### How much opportunity for mobility exists in identified mobility hotspots?
+
+```{r mobility rate by median rent in Texas}
+focus_areas %>% 
+  filter(city == "Houston, TX") %>% 
+  left_join(ct_data, by = "state") %>% 
+  filter(
+    !is.na(rent_two_bed), 
+    !is.na(move_out_of_poverty),
+    rent_two_bed > 400,
+    rent_two_bed < 1400
+  ) %>% 
+  ggplot(aes(rent_two_bed, move_out_of_poverty)) +
+  geom_point(size = 1, color = "darkblue", alpha = .7) +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  annotate(
+    geom = "text",
+    label = c("A", "B"),
+    x = 810,
+    y = c(.06, .73),
+    color = "red"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .9, by = .1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(400, 1400, by = 200),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  labs(
+    title = "Mobility Into Wealthier Areas vs. Cost of Living in Texas",
+    subtitle = "In Texas, consider moving from point A to point B.  Without paying any extra rent\nan individual could live in an area with better opportunites.",
+    x = "Median Two-Bedroom Rent",
+    y = "Proportion of Children Who Grew Up to Live\nIn an Area With a Poverty Rate of < 10%\n",
+    caption = "Source: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r employment rate by median rent in Texas}
+focus_areas %>% 
+  filter(city == "Brownsville, TX") %>% 
+  left_join(ct_data, by = "state") %>% 
+  filter(
+    !is.na(rent_two_bed), 
+    !is.na(employment_rate),
+    rent_two_bed > 400,
+    rent_two_bed < 1400
+  ) %>% 
+  ggplot(aes(rent_two_bed, employment_rate)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  annotate(
+    geom = "text",
+    label = c("A", "B"),
+    x = 810,
+    y = c(.38, .8),
+    color = "red"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .9, by = .1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(400, 1600, by = 200),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  labs(
+    title = "Employment Opportunities vs. Cost of Living in Texas",
+    subtitle = "In Texas, consider moving from point A to point B.  Without paying any extra rent\nan individual could live in an area with better opportunites.",
+    x = "Median Two-Bedroom Rent",
+    y = "Employment Rate of Children Who Grew\nUp in Given Area\n",
+    caption = "Source: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r, fig.height=8, fig.width=8, message=FALSE, warning=FALSE}
+tmap_arrange(
+  tmap_region(
+    geography = "county", 
+    state = "Texas", 
+    outcome = "rent_two_bed",
+    rev_scale = 1
+  ) +
+    tm_shape(state_borders %>% filter(NAME == "Texas")) +
+    tm_borders(col = "black") +
+    tm_layout(
+      main.title = "Texas Opportunity Characteristics",
+      main.title.size = .8
+    ) +
+    tmap_mode("plot"),
+  tmap_region(
+    geography = "county", 
+    state = "Texas", 
+    outcome = "male_incarceration_rates", 
+    rev_scale = 1
+  ) +
+    tm_shape(state_borders %>% filter(NAME == "Texas")) +
+    tm_borders(col = "black"),
+  tmap_region(
+    geography = "county", 
+    state = "Texas", 
+    outcome = "employment_rate"
+  ) +
+    tm_shape(state_borders %>% filter(NAME == "Texas")) +
+    tm_borders(col = "black"),
+  tmap_region(
+    geography = "county", 
+    state = "Texas", 
+    outcome = "household_income"
+  ) +
+    tm_shape(state_borders %>% filter(NAME == "Texas")) +
+    tm_borders(col = "black"),
+  ncol = 2,
+  nrow = 2
+)
+```
+
+**Key mobility determinants and measures such as housing cost, incomes, employment rates, and incerceration rates appear correlated across geographic regions.  Despite this, there may still be mobility hotspots in which the areas are both accessible and promising.  We can explore some of these areas below.  In the interactive maps below, scroll through to find areas in which the cost of living is low, but the socio-economic opportunities are high.**
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(
+  geography = "county", 
+  state = "Texas", 
+  outcome = "rent_two_bed", 
+  rev_scale = 1
+) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-95.3698, 29.7604, 7)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(
+  geography = "county", 
+  state = "Texas", 
+  outcome = "household_income"
+) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-95.3698, 29.7604, 7)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(
+  geography = "county", 
+  state = "Texas", 
+  outcome = "male_incarceration_rates", 
+  rev_scale = 1
+) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-95.3698, 29.7604, 7)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(
+  geography = "county", 
+  state = "Texas", 
+  outcome = "employment_rate"
+) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-95.3698, 29.7604, 7)) +
+  tmap_mode("view")
+```
+
+```{r mobility out of poverty by median rent in Phoenix}
+focus_areas %>% 
+  filter(city == "Phoenix, AZ") %>% 
+  left_join(ct_data, by = c("state", "county")) %>% 
+  filter(
+    !is.na(rent_two_bed), 
+    !is.na(move_out_of_poverty),
+    rent_two_bed > 400,
+    rent_two_bed < 1600
+  ) %>% 
+  ggplot(aes(rent_two_bed, move_out_of_poverty)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  annotate(
+    geom = "text",
+    label = c("A", "B"),
+    x = 810,
+    y = c(.1, .6),
+    color = "red"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .9, by = .1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(400, 1600, by = 200),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  labs(
+    title = "Mobility Into Wealthier Areas vs. Cost of Living in Phoenix, AZ",
+    subtitle = "In Phoenix, consider moving from point A to point B.  Without paying any extra rent\nan individual could live in an area with better opportunites.",
+    x = "Median Two-Bedroom Rent",
+    y = "Proportion of Children Who Grew Up to Live\nIn an Area With a Poverty Rate of < 10%\n",
+    caption = "Source: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r employment rate by median rent in Phoenix}
+focus_areas %>% 
+  filter(city == "Phoenix, AZ") %>% 
+  left_join(ct_data, by = c("state", "county")) %>% 
+  filter(
+    !is.na(rent_two_bed), 
+    !is.na(employment_rate),
+    rent_two_bed > 400,
+    rent_two_bed < 1600
+  ) %>% 
+  ggplot(aes(rent_two_bed, employment_rate)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  annotate(
+    geom = "text",
+    label = c("A", "B"),
+    x = 810,
+    y = c(.38, .8),
+    color = "red"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .9, by = .1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(400, 1600, by = 200),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  labs(
+    title = "Employment Opportunities vs. Cost of Living in Phoenix, AZ",
+    subtitle = "In Phoenix, consider moving from point A to point B.  Without paying any extra rent\nan individual could live in an area with better opportunites.",
+    x = "Median Two-Bedroom Rent",
+    y = "Employment Rate of Children Who Grew\nUp in Given Area\n",
+    caption = "Source: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(geography = "tract", state = "4", outcome = "move_out_of_poverty") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-112.0740, 33.4484, 10)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(geography = "tract", state = "4", outcome = "household_income") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-112.0740, 33.4484, 10)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(
+  geography = "tract", 
+  state = "4", 
+  outcome = "male_incarceration_rates", 
+  rev_scale = 1
+) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-112.0740, 33.4484, 10)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(geography = "tract", state = "4", outcome = "employment_rate") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-112.0740, 33.4484, 10)) +
+  tmap_mode("view")
+```
+
+```{r mobility into wealth by median rent in Seattle}
+focus_areas %>% 
+  filter(city == "Seattle, WA") %>% 
+  left_join(ct_data, by = c("state", "county")) %>% 
+  filter(
+    !is.na(rent_two_bed), 
+    !is.na(reach_top_20_household_income),
+    rent_two_bed > 800,
+    rent_two_bed < 1800
+  ) %>% 
+  ggplot(aes(rent_two_bed, reach_top_20_household_income)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  annotate(
+    geom = "text",
+    label = c("A", "B"),
+    x = 1400,
+    y = c(.08, .3),
+    color = "red"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .5, by = .1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(400, 1800, by = 200),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  labs(
+    title = "Mobility Into Wealth vs. Cost of Living in Seattle, WA",
+    subtitle = "In Seattle, consider moving from point A to point B.  Without paying any extra rent\nan individual could live in an area with better opportunites.",
+    x = "Median Two-Bedroom Rent",
+    y = "Probability of Reaching the Top Quintile\nof National Household Incomes\n",
+    caption = "Source: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r employment rate by median rent in Seattle}
+focus_areas %>% 
+  filter(city == "Seattle, WA") %>% 
+  left_join(ct_data, by = c("state", "county")) %>% 
+  filter(
+    !is.na(rent_two_bed), 
+    !is.na(prop_college_educated),
+    rent_two_bed > 800,
+    rent_two_bed < 1800
+  ) %>% 
+  ggplot(aes(rent_two_bed, prop_college_educated)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  annotate(
+    geom = "text",
+    label = c("A", "B"),
+    x = 1200,
+    y = c(.15, .65),
+    color = "red"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .9, by = .1),
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(400, 1600, by = 200),
+    labels = scales::comma_format(accuracy = 1, prefix = "$")
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  labs(
+    title = "Educational Opportunities vs. Cost of Living in Seattle, WA",
+    subtitle = "In Seattle, consider moving from point A to point B.  Without paying any extra rent\nan individual could live in an area with better opportunites.",
+    x = "Median Two-Bedroom Rent",
+    y = "Bachelors' Attainment Rate for Children Who Grew\nUp in Given Area\n",
+    caption = "Source: The Opportunity Atlas: Mapping the Childhood Roots of Social Mobility"
+  )
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(
+  geography = "tract", 
+  state = "53", 
+  outcome = "move_out_of_poverty"
+) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-122.3321, 47.6062, 11)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(geography = "tract", state = "53", outcome = "household_income") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-122.3321, 47.6062, 11)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(
+  geography = "tract", 
+  state = "53", 
+  outcome = "male_incarceration_rates", 
+  rev_scale = 1
+) +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-122.3321, 47.6062, 11)) +
+  tmap_mode("view")
+```
+
+```{r, message=FALSE, warning=FALSE}
+tmap_region(geography = "tract", state = "53", outcome = "employment_rate") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_view(set.view = c(-122.3321, 47.6062, 11)) +
+  tmap_mode("view")
+```

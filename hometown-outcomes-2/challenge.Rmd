@@ -1,0 +1,333 @@
+---
+title: "hometown-outcomes-2"
+author: "Your Name"
+date: 2019-
+output: 
+  html_document:
+    toc: true
+    toc_depth: 6
+---
+
+```{r include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Setup
+
+```{r message=FALSE, warning=FALSE}
+# Libraries
+library(sf)
+library(tidycensus)
+library(tmap)
+library(tmaptools) 
+library(shinyjs)
+library(tidyverse)
+library(dcl)
+
+# Parameters
+
+  # Census API Key
+census_key <- ""
+
+  # Answer filepath from part 1 of this challenge
+file_answers <- ""
+
+  # County level outcomes filepath
+county_outcomes_ez_file <- ""
+
+  # Census tract level outcomes filepath
+ct_outcomes_ez_file <- ""
+
+  # Albers projection for 48 contiguous US states
+US_ALBERS <- "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=37.5 +lon_0=-96 +x_0=0 +y_0=0 +datum=WGS84 +no_defs"
+
+  # Alaska State FIP
+alaska_state_fip <- 2
+
+  # Hawaii Stte FIP
+hawaii_state_fip <- 15
+
+  # PR State FIP
+pr_state_fip <- 72
+
+  # Atlas Colors
+atlas_colors <- c("#9a212f", "#9a212f", "#ffffc9", "#31677e", "#31677e")
+
+  # Atlas NA Color
+atlas_na_color <- "#d1d1d0"
+
+  # Tidycensus dummy variable
+tidycensus_dummy <- "B01001_001"
+
+  # Set formatting for tmap
+my_format <- scales::percent_format(accuracy = 5)
+
+#===============================================================================
+
+# Files
+
+#--- uncomment lines below once you input proper filepaths above
+
+#   # File with shapefile and outcome data
+# if (str_length(file_answers) > 0) {
+#   joined_data <- read_rds(file_answers) 
+# }
+# 
+#   # Set census API key for tidycensus use
+# census_api_key(census_key)
+# 
+#   # Read in county level outcomes
+# county_outcomes_ez <- read_csv(county_outcomes_ez_file)
+# 
+#   # Read in census tract level outcomes
+# ct_outcomes_ez <- read_csv(ct_outcomes_ez_file)
+
+#---
+```
+
+## Helper Functions
+
+```{r transform geo function}
+transform_geo <- function(geo_bounds) {
+  
+  geo_bounds %>% 
+    st_transform(US_ALBERS) %>% 
+    mutate(
+      state = as.integer(str_extract(GEOID, "^\\d{2}")),
+      county = as.integer(str_extract(GEOID, "(?<=\\d{2})\\d{3}")),
+      tract = as.integer(str_extract(GEOID, "\\d{6}$"))
+    ) %>% 
+    filter(
+      state != alaska_state_fip, 
+      state != hawaii_state_fip, 
+      state != pr_state_fip
+    )
+}
+```
+
+#===============================================================================
+
+## Introduction
+
+This challenge is based off of work and data from the Opportunity Atlas, a project headed by Raj Chetty et. al.  The work has sparked policy considerations regarding the possibility of moving people into affordable, high-mobility neighborhoods in hopes it would lead them to better social outcomes. You can find links to the the original paper, interactive map, data, and a NYT article below. Check them out to familiarize yourself with the info!
+
+* Paper: https://opportunityinsights.org/wp-content/uploads/2018/10/atlas_paper.pdf
+
+* Interactive Map: https://www.opportunityatlas.org/
+
+* Data: https://opportunityinsights.org/data/?geographic_level=0&topic=0&paper_id=1652#resource-listing
+
+* Press Articles: https://opportunityinsights.org/press-paper/the-opportunity-atlas-mapping-the-childhood-roots-of-social-mobility/
+
+The goal of this challenge is to explore some key mobility outcomes for an area of your choosing, such as income, incarceration, and teen pregnancy.  For the sake of simplicity, you won't be able to explore areas outside of the continental United States, nor can you explore Washington D.C. as it's special designation makes it difficult with the tools we have.
+
+**Disclaimer:** The challenge below may appear a bit wordy, but it is meant to be highly guided and used as a relatively painless learning experience.
+
+#===============================================================================
+
+## Downloading Mobility Data & Tidycensus Setup
+
+#### Reading in data
+
+To begin, we must read in the data.  For simplicity, the bulk of the processing has done for you.  Go to the box folder for this challenge's data - [https://stanford.box.com/s/uafg88ya77as4zuf02bq6ehjif5yvbys] - and download the data to someplace on your computer that is not your personal repo.  Then locate the files, and copy their filepaths to the corresponsding paramters above.  Once you've done this, uncomment and run the lines above in **Setup** that read in the csv files.
+
+#### Your census API key
+
+In this challenge, we'll use the tidycensus package, developed by Kyle Walker.  You can read up on it here - https://walkerke.github.io/tidycensus/articles/basic-usage.html.  The package allows quick and easy access to census data by giving you a series of functions which take basic information such as the geography you wish to gather data for, the state, location, and several other parameters.  
+
+To do this, you must create a census API key.  You can easily do this using the following link -  http://api.census.gov/data/key_signup.html.  Once you have your key, copy and paste it into the `census_key` parameter above.  Uncomment the line "census_api_key" line and run it.  This will install the key onto your computer for future use.
+
+#===============================================================================
+
+## Mapping Data
+
+#### Mapping general data
+
+Now that we have all of our data joined and fit for mapping (per part 1 of this challenge), we'll learn about the tmap library of functions, which allow for plotting of both static and intractive maps fairly easily. You can browse through some of the basic functionality at this link - https://cran.r-project.org/web/packages/tmap/vignettes/tmap-getstarted.html - though the documentation isn't the best.  That said, below I'll step through using some of the functions I've found most helpful in creating a fun and exciting map!
+
+Review some of the basic methods and layering techniques here.
+```{r}
+?tmap
+```
+
+The four functions we'll use include:
+
+* `tm_basemap()` to lay a basemap
+
+* `tm_shape()` to define an object we want to look into for relevant mapping data such as geometries and outcome variables
+
+* `tm_polygons()` which serves to fill in our maps with the desired data, specifications, style, etc.
+
+* `tm_layout()` to help format out map (though it isn't perfect)
+
+* `tmap_mode()` to toggle between static and interactive maps
+
+I recommend looking at the documentation for each of these to familiarize yourself with the various arguments
+
+__q1__ To create your first map using the New York data (`joined_data$q3.1` & `joined_data$q3.2`), you only need 4 lines of code.  This is the beauty of tmap. They won't be the prettiest, but we'll get there.
+
+* Hints
+
+  + The first line should specify a basemap.  I recommend using `leaflet::providers$Stamen.TonerLite`, but you can find a fuller list at this link - https://leaflet-extras.github.io/leaflet-providers/preview/.  
+
+  + The second line should specify the dataframe that you want to use, which should include the geometry and outcome/mobility variable you want to map.
+
+  + The third line should specify the outcome you want to map.  For these maps, let's map the projected household income percentile of an adult who grew up in a given area as a child and whose parents were in the bottom quartile of income - this has been renamed as `household_income` in our mobility data.
+  
+  + The last line will specify that we want to map a static map.
+  
+__q1.1__ Create a static map of your `joined_data$q3.1` data using the steps above.  Check the documentation for each of the above functions if you need assistance.  For now, each function should only require one argument. Store it in the variable `q1.1`.
+
+```{r static map of joined_data$q3.1}
+
+```
+
+To change this map into an interactive map, which will also allow us to drag and zoom, all we need to do is toggle between views using `ttm()`.  Note that layers and functions in `tmap`, like `ggplot2` are added with a +.
+```{r interactive map of joined_data$q3.1}
+
+```
+
+Notice that we can't see the basemap below.  This is because `tm_polygons()` has a dafult `alpha` of 1.  
+
+__q1.2__ Using the same code that you wrote above in `q1.1` (copy and paste it over), adjust the alpha argument with `tm_polygons()` to make the map more informative. Make sure to make the map interactive with `tmap_mode()`.  Store this map as q1.2.
+
+```{r adding alpha to interactive joined_data$q3.1}
+
+```
+
+Much better!  Now, in this last step we'll put the finishing touches on our map.  Namely, we'll adjust the coloring with `breaks`, `style`, `palette`, and `colorNA`, legend formatting (which will only affect the static map legend) using `labels` and `legend.format`, popup formatting using `id` (which is only present in the interactive version), and the overall aesthetic using `tm_layout()` and it's arguments `frame` and `main.title`.
+
+To aid in several of these things, we'll use two functions: the first, `color_breaks()`, finds the proper breaks for the 0th, 2.5th, 50th, 97.5th, and 100th percentiles; the second in the `Setup`  section above is called `my_format()` and formats the legend.labels in the static map. 
+
+I've also provided colors as `atlas_colors` and `atlas_na_color` which correspond to the same colors used in the official paper.
+
+```{r break finding function}
+# Takes the bounds data, and the outcome you are mapping as a string
+
+color_breaks <- function(bounds, outcome) {
+  
+  vals <-
+    c(
+      quantile(bounds[[outcome]], 0, na.rm = TRUE),
+      quantile(bounds[[outcome]], .025, na.rm = TRUE) + .00001,
+      median(bounds[[outcome]], na.rm = TRUE),
+      quantile(bounds[[outcome]], .975, na.rm = TRUE),
+      quantile(bounds[[outcome]], 1, na.rm = TRUE)
+    ) 
+  
+  vals
+  
+}
+```
+
+__q1.3__ Starting with the same code as you used in `q1.2` (copy it over), add in the above arguments to produce a static map of the New York State data.  Save the static plot into `q1.3` and then use that + `ttm()` to create an interactive version of your map.
+
+* Hints:
+  
+  + We want the coloring scheme to be a continuous gradient.  To do this, use `style = "cont"`.
+  
+  + If you wanted to map a variable in which higher values are considered worse, such as `male_incarceration_rates`, you could reverse the color scale palette by using `rev(atlas_colors)`.
+  
+  + To use `my_format()`, pass in the breaks of the legend which are calculated using `color_breaks()`.
+  
+  + The popup id's should be informative and should use the names of each observation ie. the name of the county.
+  
+  + Within `tm_layout`, it is best to have no frame.
+  
+  + For cleanliness, include the following lines within `tm_layout()`:
+  
+    + legend.outside = TRUE, legend.outside.position = "right"
+
+```{r final static version of joined_data$q3.1}
+
+```
+
+```{r final interactive version of joined_data$q3.1}
+
+```
+
+Pretty neat right!?
+
+#### Personal mapping
+
+__q2__ You may notice that the above code in q1.3 is pretty generalizeable to any set of shapefiles/outcome data we may have, and to any outcome we want to look at.  With this in mind, let's explore some data a bit more relevant to you.  Using the chunk below input your home state and county. For those outside the U.S., choose a state and county that is interesting to you.  Note that you cannot explore regions outside the U.S., nor Washington D.C. due to its special designation.
+
+```{r gather shapefiles for Santa Clara County California, results="hide"}
+# Uncomment lines below when you have read in the proper outcome data files
+
+# my_state <- ""   # enter your own state here
+# my_county <- "" # enter your own county here
+# 
+# my_state_bounds <- 
+#   get_acs(
+#     geography = "county",
+#     state = my_state,
+#     geometry = TRUE, 
+#     variables = tidycensus_dummy, 
+#     year = 2010
+#   ) %>% 
+#   transform_geo() %>% 
+#   left_join(
+#     county_outcomes_ez,
+#     by = c("state", "county")
+#   )
+# 
+# my_county_bounds <-
+#   get_acs(
+#     geography = "tract",
+#     state = my_state,
+#     county = my_county,
+#     geometry = TRUE, 
+#     variables = tidycensus_dummy, 
+#     year = 2010
+#   ) %>% 
+#   transform_geo() %>% 
+#   left_join(
+#     ct_outcomes_ez,
+#     by = c("state", "county", "tract")
+#   )
+```
+
+To start mapping this data, you could try retyping the tmap code from scratch or simply use your existing code from `q1.3`. If you choose to re-use the existing code, the only items that should need to be changed are the boundary data passed in, the outcome you wish to map, the main title, and if it is appropriate, reverse the vector of `atlas_colors` passed to `palette`.
+
+Make at least 2 maps for your state and 2 for your county.  For each, one should be a static map and the other should be an interactive map for at least a total of 2 static and 2 interactive.  Again, this should be fairly simple if you reuse the code from above.  Try mapping income, and either incarceration rates/teen pregnancy rates, and make note of how they seem to relate.
+
+**A note on the variables you can explore.  The original data includes thousands of different outcomes for every permutation of race, income, and gender that you can think of, something that can be overwhelming.  For the sake of this challenge, the data has been trimmed to only include those which are the outcomes for adults who grew up in a given geography and whose families came from the 25th percentile of incomes.  Most, if not all, of these variables are proportions which range from 0% to 100%.  You can find a recommended list of variables to explore below.**
+
+```{r}
+# Uncomment lines below when you have read in the proper outcome data files
+
+# tibble(
+#   outcomes_to_explore = 
+#     unique(c(names(county_outcomes_ez), names(ct_outcomes_ez)))
+# ) %>% 
+#   mutate(
+#     rid = str_detect(outcomes_to_explore, "pooled")
+#   ) %>% 
+#   filter(
+#     rid == FALSE, 
+#     !(outcomes_to_explore %in% c("state", "tract", "county"))
+#   ) %>% 
+#   select(outcomes_to_explore)
+```
+
+```{r final static version of my_state}
+
+```
+
+```{r final interactive version of my_state}
+
+```
+
+```{r final static version of my_county}
+
+```
+
+```{r final interactive version of my_county}
+
+```
+
+
+#===============================================================================
+
+Hope you enjoyed the challenge!

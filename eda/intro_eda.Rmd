@@ -1,0 +1,1278 @@
+---
+title: "EDA_1"
+author: "Michael Spencer"
+date: "January 28, 2019"
+output: 
+  github_document:
+    toc: true
+---
+
+```{r setup, include=FALSE, dpi=300}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load libraries}
+# Libraries
+library(tigris)
+options(tigris_class = "sf")
+options(tigris_use_cache = TRUE)
+library(sf)
+library(tidycensus)
+library(mapview)
+library(tmap)
+library(tmaptools) 
+library(shinyjs)
+library(tidyverse)
+library(ggrepel)
+
+census_api_key("891e70ea96814a52b3992d4f85fd4fb500721349")
+
+# Load Workspace Data
+#load("C:/Users/Michael Spencer/Desktop/ENGR 150 DATA/c01/c01 workspace.RData")
+```
+
+```{r create global paramters, cache=TRUE}
+# Paramaters
+  # File Path with County Outcomes
+file_path_1 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\county_outcomes.csv"
+
+  # File Path with County Outcomes Simple
+file_path_2 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\county_outcomes_simple.csv"
+
+  # File Path with County Covariates
+file_path_3 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cty_covariates.csv"
+
+  # File Path with Commuting Zone Covariates
+file_path_4 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cz_covariates.csv"
+
+  # File Path with Commuting Zone Outcomes
+file_path_5 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cz_outcomes.csv"
+
+  # File Path with Simple Commuting Zone Outcomes
+file_path_6 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cz_outcomes_simple.csv"
+
+  # File Path with National Percentile Outcomes
+file_path_7 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\national_percentile_outcomes.csv"
+
+  # File Path with Percentile to Dollar Crosswalk
+file_path_8 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\pctile_to_dollar_cw.csv"
+
+  # File Path with Census Tract Covariates
+file_path_9 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\tract_covariates.csv"
+
+  # File Path with Census Tract Early Outcomes (parsing errors)
+file_path_10 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\tract_outcomes_early.csv"
+
+  # File Path with Simple Census Tract Outcomes
+file_path_11 <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\tract_outcomes_simple.csv"
+
+#Condensed Files
+#===============================================================================
+county_outcomes_ez_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\county_outcomes_ez.csv"
+
+ct_outcomes_ez_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\ct_outcomes_ez.csv"
+
+cz_outcomes_ez_file <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cz_outcomes_ez.csv"
+
+  # Albers projection for 48 contiguous US states
+US_ALBERS <- "+proj=aea +lat_1=29.5 +lat_2=45.5 +lat_0=37.5 +lon_0=-96 +x_0=0 +y_0=0 +datum=WGS84 +no_defs"
+
+  # State Fips, Names, & Abbreviations
+file_path_state_fips <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\states.csv"
+
+  # File for state borders
+file_state_borders <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\cb_2017_us_state_20m_sf.rds"
+
+  # File for county borders
+file_county_borders <- "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\cb_2017_us_county_20m_sf.rds"
+
+  # Alaska State FIP
+alaska_state_fip <- 2
+
+  # Hawaii Stte FIP
+hawaii_state_fip <- 15
+
+  # PR State FIP
+pr_state_fip <- 72
+
+  # Chicago Tracts
+# chicago_tracts <- map_metro("Illinois", "Chicago") %>% 
+#   left_join(ct_outcomes_simple, by = c("state", "county", "tract"))
+
+  # Atlas Colors
+atlas_colors <- c("#9a212f", "#9a212f", "#ffffc9", "#31677e", "#31677e")
+
+  # Atlas NA Color
+atlas_na_color <- "#d1d1d0"
+
+  # Prop White, Non-Educated, etc Color Values
+income_colors_values <- 
+  c(
+    quantile(ct_outcomes_ez$kfr_pooled_pooled_p25, 0, na.rm = TRUE),
+    quantile(ct_outcomes_ez$kfr_pooled_pooled_p25, .025, na.rm = TRUE),
+    median(ct_outcomes_ez$kfr_pooled_pooled_p25, na.rm = TRUE),
+    quantile(ct_outcomes_ez$kfr_pooled_pooled_p25, .975, na.rm = TRUE),
+    quantile(ct_outcomes_ez$kfr_pooled_pooled_p25, 1, na.rm = TRUE)
+  ) %>% 
+  scales::rescale()
+
+  # Percent formatting function
+my_format <- scales::percent_format(accuracy = 5)
+```
+
+```{r read in data, cache=TRUE}
+#county_outcomes <- read_csv(file_path_1)
+
+#county_outcomes_simple <- read_csv(file_path_2)
+
+#county_cov <- read_csv(file_path_3)
+
+cz_cov <- read_csv(file_path_4)
+
+#cz_outcomes <- read_csv(file_path_5)
+
+#cz_outcomes_simple <- read_csv(file_path_6)
+
+national_percentile_outcomes <- read_csv(file_path_7)
+
+#pctile_to_dollar_cw <- read_csv(file_path_8)
+
+ct_cov <- read_csv(file_path_9)
+
+#ct_outcomes_early <- read_csv(file_path_10)
+
+#ct_outcomes_simple <- read_csv(file_path_11)
+
+county_outcomes_ez <- read_csv(county_outcomes_ez_file)
+
+ct_outcomes_ez <- read_csv(ct_outcomes_ez_file)
+
+cz_outcomes_ez <- read_csv(cz_outcomes_ez_file)
+
+state_fips <- file_path_state_fips %>% 
+  read_csv(col_types = c(col_character(), col_integer(), col_character()))
+
+major_cities_fips <- tibble(
+  city = c("Chicago", "Los Angeles", "San Francisco", "Oakland", "Phoenix", "Louisville"),
+  state = c(17, 06, 06, 06, 04, 21),
+  state_chr = c("17", "06", "06", "06", "04", "21"),
+  county = c(031, 037, 075, 001, 013, 111),
+  county_chr = c("031", "037", "075", "001", "013", "111"),
+  FIPS = c(17031, 06037, 06075, 06001, 04013, 21111)
+)
+
+state_borders <- 
+  read_rds(file_state_borders) %>% 
+  filter(!(NAME %in% c("Alaska", "Hawaii"))) %>% 
+  st_transform(US_ALBERS)
+
+county_borders <-
+  read_rds(file_county_borders) %>% 
+  filter(!(as.integer(STATEFP) %in% c(alaska_state_fip, hawaii_state_fip))) %>% 
+  st_transform(US_ALBERS)
+```
+
+```{r file manipulation}
+# county_outcomes_ez <-
+#   county_outcomes %>% 
+#   select(state, county, teenbrth_pooled_female_p25, contains("pooled_pooled_p25"))
+# 
+# ct_outcomes_ez <-
+#   ct_outcomes_early %>%
+#   select(
+#     state, 
+#     county, 
+#     tract, 
+#     teenbrth_pooled_female_p25, 
+#     contains("pooled_pooled_p25")
+#   )
+# 
+# cz_outcomes_ez <-
+#   cz_outcomes %>%
+#   select(
+#     cz,
+#     czname,
+#     teenbrth_pooled_female_p25, 
+#     contains("pooled_pooled_p25")
+#   )
+# 
+# write_csv(county_outcomes_ez, "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\county_outcomes_ez.csv")
+# 
+# write_csv(ct_outcomes_ez, "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\ct_outcomes_ez.csv")
+# 
+# write_csv(cz_outcomes_ez, "C:\\Users\\Michael Spencer\\Desktop\\ENGR 150 DATA\\c01\\cz_outcomes_ez.csv")
+```
+
+
+## Exploring National Outcomes
+
+```{r adulthood household income rank vs parental household income rank by race}
+national_percentile_outcomes %>% 
+  ggplot(aes(x = par_pctile)) +
+  geom_point(aes(y = kfr_white_pooled, color = "white_ex"), shape = 15, size = 1.5) +
+  geom_line(aes(y = s_kfr_white_pooled, color = "white_ex"), size = 1) +
+  geom_point(aes(y = kfr_hisp_pooled, color = "hisp_ex"), shape = 16) +
+  geom_line(aes(y = s_kfr_hisp_pooled, color = "hisp_ex"), size = 1) +
+  geom_point(aes(y = kfr_black_pooled, color = "blk_ex"), shape = 17) +
+  geom_line(aes(y = s_kfr_black_pooled, color = "blk_ex"), size = 1) + 
+  geom_point(aes(y = kfr_asian_pooled, color = "as_ex"), shape = 17) +
+  geom_line(aes(y = s_kfr_asian_pooled, color = "as_ex"), size = 1) +
+  scale_y_continuous(
+    breaks = seq(.3, .7, by = .1),
+    minor_breaks = NULL,
+    labels = seq(30, 70, by = 10)
+  ) +
+  scale_color_manual(
+    name = "Race",
+    values = c(white_ex = "darkblue", hisp_ex = "orange", blk_ex = "maroon", as_ex = "darkgreen"),
+    labels = c(blk_ex = "Black", as_ex = "Asian", white_ex = "White", hisp_ex = "Hispanic")
+  ) +
+  labs(
+    title = "Household Income Rank by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nhigher income households as adults.",
+    x = "Parent Household Income Rank",
+    y = "Children's Mean Household income Rank (Ages 31-37)"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  ) +
+  guides(color = guide_legend(reverse = TRUE))
+```
+
+```{r adulthood incarceration rates vs parental household income rank by race}
+national_percentile_outcomes %>% 
+  ggplot(aes(x = par_pctile)) +
+  geom_point(aes(y = jail_white_male, color = "white_ex"), shape = 15, size = 1.5) +
+  geom_line(aes(y = s_jail_white_male, color = "white_ex"), size = 1) +
+  geom_point(aes(y = jail_hisp_male, color = "hisp_ex"), shape = 16) +
+  geom_line(aes(y = s_jail_hisp_male, color = "hisp_ex"), size = 1) +
+  geom_point(aes(y = jail_black_male, color = "blk_ex"), shape = 17) +
+  geom_line(aes(y = s_jail_black_male, color = "blk_ex"), size = 1) +
+  scale_y_continuous(
+    breaks = seq(0, .2, by = .05),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_color_manual(
+    name = "Race",
+    values = c(white_ex = "darkblue", hisp_ex = "orange", blk_ex = "maroon"),
+    labels = c("Black", "Hispanic", "White")
+  ) +
+  labs(
+    title = "Male Incarceration Rates by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nlower incarceration rates as adults.",
+    x = "Parent Household Income Rank",
+    y = "% of Men Incarcerated on April 1, 2010 (Ages 27-32)"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+```{r HS completion rates vs parental household income}
+national_percentile_outcomes %>% 
+  ggplot(aes(x = par_pctile)) +
+  geom_point(aes(y = hs_white_pooled, color = "white_ex"), shape = 15, size = 1.5) +
+  geom_line(aes(y = s_hs_white_pooled, color = "white_ex"), size = 1) +
+  geom_point(aes(y = hs_hisp_pooled, color = "hisp_ex"), shape = 16) +
+  geom_line(aes(y = s_hs_hisp_pooled, color = "hisp_ex"), size = 1) +
+  geom_point(aes(y = hs_black_pooled, color = "blk_ex"), shape = 17) +
+  geom_smooth(aes(y = hs_black_pooled, color = "blk_ex"), se = FALSE, size = 1) +
+  geom_point(aes(y = hs_asian_pooled, color = "as_ex"), shape = 17) +
+  geom_smooth(aes(y = hs_asian_pooled, color = "as_ex"), se = FALSE, size = 1) +
+  scale_y_continuous(
+    breaks = seq(.5, 1, by = .1),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_color_manual(
+    name = "Race",
+    values = c(white_ex = "darkblue", hisp_ex = "orange", blk_ex = "maroon", as_ex = "darkgreen"),
+    labels = c(blk_ex = "Black", as_ex = "Asian", white_ex = "White", hisp_ex = "Hispanic")
+  ) +
+  labs(
+    title = "National High School Completion Rates by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nhigher high school completion rates.",
+    x = "Parent Household Income Rank",
+    y = "Children's High School Completion Rates"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+```{r College completion rates vs parental household income}
+national_percentile_outcomes %>% 
+  ggplot(aes(x = par_pctile)) +
+  geom_point(aes(y = coll_white_pooled, color = "white_ex"), shape = 15, size = 1.5) +
+  geom_line(aes(y = s_coll_white_pooled, color = "white_ex"), size = 1) +
+  geom_point(aes(y = coll_hisp_pooled, color = "hisp_ex"), shape = 16) +
+  geom_line(aes(y = s_coll_hisp_pooled, color = "hisp_ex"), size = 1) +
+  geom_point(aes(y = coll_black_pooled, color = "blk_ex"), shape = 17) +
+  geom_line(aes(y = s_coll_black_pooled, color = "blk_ex"), size = 1) +
+  scale_y_continuous(
+    breaks = seq(0, 1, by = .1),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_color_manual(
+    name = "Race",
+    values = c(white_ex = "darkblue", hisp_ex = "orange", blk_ex = "maroon", as_ex = "darkgreen"),
+    labels = c(blk_ex = "Black", as_ex = "Asian", white_ex = "White", hisp_ex = "Hispanic")
+  ) +
+  labs(
+    title = "National College Completion Rates by Race and Ethnicity",
+    subtitle = "Across all races, children growing up in higher income households tend to have\nhigher college completion rates.",
+    x = "Parent Household Income Rank",
+    y = "Children's College Completion Rates"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+## Exploring Commuting Zone Trends
+
+```{r combine cz simplified outcomes with charactreristics}
+cz_join_simple <-
+  cz_cov %>% 
+  left_join(cz_outcomes_ez, by = c("cz", "czname"))
+```
+
+```{r Upward mobility vs job growth in the largest 50 CZs}
+cz_join_simple %>% 
+  arrange(desc(popdensity2010)) %>% 
+  top_n(30) %>% 
+  ggplot(aes(job_growth_1990_2010, kfr_pooled_pooled_p25)) +
+  geom_hline(
+    aes(yintercept = median(kfr_pooled_pooled_p25)), 
+    linetype = 2, 
+    color = "red", 
+    alpha = .7
+  ) +
+  geom_vline(
+    aes(xintercept = median(job_growth_1990_2010)), 
+    linetype = 2, 
+    color = "red", 
+    alpha = .7
+  ) +
+  geom_point(size = 2, color = "darkblue") +
+  geom_text(
+    aes(label = czname), 
+    size = 2.5, 
+    nudge_x = 5.5,
+    color = "darkblue"
+  ) +
+  coord_cartesian(xlim = c(0, 80), ylim = c(.375, .46)) +
+  scale_y_continuous(
+    breaks = seq(.38, .46, by = .02),
+    minor_breaks = NULL,
+    labels = c("38", "40", "42", "44", "46")
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 80, by = 10),
+    minor_breaks = NULL,
+    labels = c("0%", "10%", "20%", "30%", "40%", "50%", "60%", "70%", "80%")
+  ) +
+  labs(
+    title = "Upward Mobility vs. Job Growth in the Largest 50 Commuting Zones\nby Population Density",
+    x = "Job Growth Rate from 1990 to 2010 (%)",
+    y = "Children's Mean Household Income Rank\nGiven Parents at the 25th Income Percentile"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+## Exploring Individual Cities
+
+```{r table with major cities and thier related fips}
+major_cities_fips
+```
+
+```{r adulthood income based on median rent in Chicago}
+major_cities_fips %>% 
+  filter(city == "Chicago") %>% 
+  left_join(ct_outcomes_ez, by = c("state", "county")) %>% 
+  left_join(ct_cov, by = c("state", "county", "tract")) %>% 
+  select(rent_twobed2015, kfr_pooled_pooled_p25) %>% 
+  filter(!is.na(rent_twobed2015), !is.na(kfr_pooled_pooled_p25)) %>% 
+  ggplot(aes(rent_twobed2015, kfr_pooled_pooled_p25)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  coord_cartesian(
+    xlim = c(0, 2000),
+    ylim = c(.2, .7)
+  ) +
+  scale_y_continuous(
+    breaks = seq(.2, .7, by = .1),
+    minor_breaks = NULL,
+    labels = c("20", "30", "40", "50", "60", "70")
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 2000, by = 500),
+    minor_breaks = NULL,
+    labels = c("$0", "$500", "$1,000", "$1,500", "$2,000")
+  ) +
+  labs(
+    title = "Children's Mean Income Rank in Adulthood vs. Median Rents in Chicago",
+    x = "Median Two-Bedroom Rent in 1990 (2015 Dollars)",
+    y = "Children's Mean Household Income Rank\nGiven Parents at the 25th Income Percentile"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+```{r adulthood incarceration rates based on median rent in Chicago}
+major_cities_fips %>% 
+  filter(city == "Chicago") %>% 
+  left_join(ct_outcomes_ez, by = c("state", "county")) %>% 
+  left_join(ct_cov, by = c("state", "county", "tract")) %>% 
+  select(rent_twobed2015, jail_pooled_pooled_p25) %>% 
+  filter(!is.na(rent_twobed2015), !is.na(jail_pooled_pooled_p25), jail_pooled_pooled_p25 >= 0) %>% 
+  ggplot(aes(rent_twobed2015, jail_pooled_pooled_p25)) +
+  geom_boxplot(aes(group = cut_width(rent_twobed2015, 200)), varwidth = TRUE) +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  coord_cartesian(
+    xlim = c(0, 2500),
+    ylim = c(0, .15)
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .15, by = .03),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 2500, by = 500),
+    minor_breaks = NULL,
+    labels = c("$0", "$500", "$1,000", "$1,500", "$2,000", "$2,500")
+  ) +
+  labs(
+    title = "Adulthood Incarceration Rates vs. Median Rents in Chicago",
+    x = "Median Two-Bedroom Rent in 1990 (2015 Dollars)",
+    y = "% of Adults Incarcerated on April 1, 2010 (Ages 27-32)\nGiven Parents at the 25th Income Percentile"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+```{r adulthood incarceration rates based on median rent in Los Angeles}
+major_cities_fips %>% 
+  filter(city == "Los Angeles") %>% 
+  left_join(ct_outcomes_ez, by = c("state", "county")) %>% 
+  left_join(ct_cov, by = c("state", "county", "tract")) %>% 
+  select(rent_twobed2015, jail_pooled_pooled_p25) %>% 
+  filter(!is.na(rent_twobed2015), !is.na(jail_pooled_pooled_p25), jail_pooled_pooled_p25 >= 0) %>% 
+  ggplot(aes(rent_twobed2015, jail_pooled_pooled_p25)) +
+  geom_boxplot(aes(group = cut_width(rent_twobed2015, 200)), varwidth = TRUE) +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  coord_cartesian(
+    xlim = c(0, 3000),
+    ylim = c(0, .1)
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, .1, by = .01),
+    minor_breaks = NULL,
+    labels = scales::percent_format(accuracy = 1)
+  ) +
+  scale_x_continuous(
+    breaks = seq(0, 3000, by = 500),
+    minor_breaks = NULL,
+    labels = c("$0", "$500", "$1,000", "$1,500", "$2,000", "$2,500", "$3,000")
+  ) +
+  labs(
+    title = "Adulthood Incarceration Rates vs. Median Rents in Los Angeles",
+    x = "Median Two-Bedroom Rent in 1990 (2015 Dollars)",
+    y = "% of Adults Incarcerated on April 1, 2010 (Ages 27-32)\nGiven Parents at the 25th Income Percentile"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+```{r adulthood income based on median rent in Oakland}
+major_cities_fips %>% 
+  filter(city == "Oakland") %>% 
+  left_join(ct_outcomes_ez, by = c("state", "county")) %>% 
+  left_join(ct_cov, by = c("state", "county", "tract")) %>% 
+  select(rent_twobed2015, kfr_pooled_pooled_p25) %>% 
+  filter(!is.na(rent_twobed2015), !is.na(kfr_pooled_pooled_p25)) %>% 
+  ggplot(aes(rent_twobed2015, kfr_pooled_pooled_p25)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  coord_cartesian(
+    xlim = c(1000, 2500),
+    ylim = c(.3, .7)
+  ) +
+  scale_y_continuous(
+    breaks = seq(.3, .7, by = .1),
+    minor_breaks = NULL,
+    labels = c("30", "40", "50", "60", "70")
+  ) +
+  scale_x_continuous(
+    breaks = seq(1000, 2500, by = 500),
+    minor_breaks = NULL,
+    labels = c("$1,000", "$1,500", "$2,000", "$2,500")
+  ) +
+  labs(
+    title = "Children's Mean Income Rank in Adulthood vs. Median Rents in Oakland",
+    x = "Median Two-Bedroom Rent in 1990 (2015 Dollars)",
+    y = "Children's Mean Household Income Rank\nGiven Parents at the 25th Percentile"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+```{r adulthood income based on median rent in San Francisco}
+major_cities_fips %>% 
+  filter(city == "San Francisco") %>% 
+  left_join(ct_outcomes_ez, by = c("state", "county")) %>% 
+  left_join(ct_cov, by = c("state", "county", "tract")) %>% 
+  select(rent_twobed2015, kfr_pooled_pooled_p25) %>% 
+  filter(!is.na(rent_twobed2015), !is.na(kfr_pooled_pooled_p25)) %>% 
+  ggplot(aes(rent_twobed2015, kfr_pooled_pooled_p25)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  coord_cartesian(
+    xlim = c(500, 3500),
+    ylim = c(.3, .65)
+  ) +
+  scale_y_continuous(
+    breaks = seq(.3, .65, by = .1),
+    minor_breaks = NULL,
+    labels = c("30", "40", "50", "60")
+  ) +
+  scale_x_continuous(
+    breaks = seq(500, 3500, by = 500),
+    minor_breaks = NULL,
+    labels = c("$500", "$1,000", "$1,500", "$2,000", "$2,500", "$3,000", "$3,500")
+  ) +
+  labs(
+    title = "Children's Mean Income Rank in Adulthood vs. Median Rents in San Francisco",
+    x = "Median Two-Bedroom Rent in 1990 (2015 Dollars)",
+    y = "Children's Mean Household Income Rank\nGiven Parents at the 25th Percentile"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+```{r adulthood income based on median rent in Phoenix}
+major_cities_fips %>% 
+  filter(city == "Phoenix") %>% 
+  left_join(ct_outcomes_ez, by = c("state", "county")) %>% 
+  left_join(ct_cov, by = c("state", "county", "tract")) %>% 
+  select(rent_twobed2015, kfr_pooled_pooled_p25) %>% 
+  filter(!is.na(rent_twobed2015), !is.na(kfr_pooled_pooled_p25)) %>% 
+  ggplot(aes(rent_twobed2015, kfr_pooled_pooled_p25)) +
+  geom_point(size = 1, color = "darkblue") +
+  geom_smooth(method = "lm", se = FALSE, color = "maroon") +
+  coord_cartesian(
+    xlim = c(250, 1500),
+    ylim = c(.2, .7)
+  ) +
+  scale_y_continuous(
+    breaks = seq(.2, .7, by = .1),
+    minor_breaks = NULL,
+    labels = c("20", "30", "40", "50", "60", "70")
+  ) +
+  scale_x_continuous(
+    breaks = seq(250, 1500, by = 250),
+    minor_breaks = NULL,
+    labels = c("$250", "$500", "$750", "$1,000", "$1,250", "$1,500")
+  ) +
+  labs(
+    title = "Children's Mean Income Rank in Adulthood vs. Median Rents in Phoenix",
+    x = "Median Two-Bedroom Rent in 1990 (2015 Dollars)",
+    y = "Children's Mean Household Income Rank\nGiven Parents at the 25th Percentile"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid = element_line(color = "gray95")
+  )
+```
+
+#===============================================================================
+
+## Playing with Geom_SF and Tigris For
+
+##### Functions
+
+```{r function to subset core-based statistical measure into census tracts and map}
+
+# Add in faceting functionality and labels for major cities/neighborhoods to orient the map
+
+map_metro <- function(state, metro, outcome, rev_scale) {
+  
+  focused_tracts <-
+    core_based_statistical_areas(cb = TRUE, year = 2010) %>% 
+    filter(grepl(metro, NAME)) %>% 
+    st_within(tracts(state = state, year = 2010), .) %>% 
+    map_lgl(function(x) {
+      if (length(x) == 1) {
+        return(TRUE)
+      } else {
+        return(FALSE)
+      }
+    }) %>% 
+    tracts(state = state, year = 2010)[., ] %>% 
+    st_transform(US_ALBERS) %>% 
+    mutate(
+      state = as.double(STATEFP10) %% 100,
+      county = as.double(COUNTYFP10) %% 10000,
+      tract = as.double(TRACTCE10) %% 1000000
+    ) %>% 
+    left_join(ct_outcomes_ez, by = c("state", "county", "tract"))
+  
+  ggplot(data = focused_tracts) +
+    geom_sf(aes(fill = focused_tracts[[outcome]]), color = NA) +
+    coord_sf(datum = NA) +
+    theme_void() +
+    theme(
+      legend.position = "bottom",
+      legend.text = element_text(size = 5)
+    ) +
+    scale_fill_gradientn(
+      colors = atlas_colors,
+      values = color_values_ct(focused_tracts, outcome, rev_scale),
+      na.value = atlas_na_color,
+      breaks = seq(.1, 1, by = .1),
+      labels =
+        c("10%", "20%","30%", "40%","50%", "60%", "70%", "80%", "90%", "100%")
+    ) +
+    guides(
+      fill = 
+        guide_colorbar(
+          title = case_when(
+            str_detect(outcome, "kfr") ~ "Children's Mean Household Income Rank",
+            str_detect(outcome, "jail") ~ "% of Adults Incarcerated on April 1, 2010",
+            str_detect(outcome, "teenbrth") ~ "% of Children who grew up to have children\nbetween the ages of 13 - 19",
+            TRUE ~ "Outcome Proportion"
+          ),
+          title.position = "top",
+          title.theme = element_text(size = 7),
+          barwidth = 10,
+          barheight = .25
+        )
+    ) +
+    labs(
+      title = str_c(metro, "Metropolitan Area", sep = " ")
+    )
+  
+}
+```
+
+```{r function to subset county into census tracts and map}
+
+# Add in faceting functionality and labels for major cities/neighborhoods to orient the map
+
+map_county <- function(state, county, outcome, rev_scale) {
+  
+  focused_tracts <-
+    get_decennial(
+      geography = "tract",
+      state = state,
+      county = county,
+      geometry = TRUE, 
+      variables = "P005003", 
+      year = 2010
+    ) %>% 
+    st_transform(US_ALBERS) %>% 
+    mutate(
+      state = as.integer(str_extract(GEOID, "^\\d{2}")),
+      county = as.integer(str_extract(GEOID, "(?<=\\d{2})\\d{3}")),
+      tract = as.integer(str_extract(GEOID, "\\d{6}$"))
+    ) %>% 
+    left_join(ct_outcomes_ez, by = c("state", "county", "tract"))
+  
+  ggplot(data = focused_tracts) +
+    geom_sf(aes(fill = focused_tracts[[outcome]]), color = NA) +
+    coord_sf(datum = NA) +
+    theme_void() +
+    theme(
+      legend.position = "bottom",
+      legend.text = element_text(size = 5)
+    ) +
+    scale_fill_gradientn(
+      colors = atlas_colors,
+      values = color_values_ct(focused_tracts, outcome, rev_scale),
+      na.value = atlas_na_color,
+      breaks = seq(.1, 1, by = .1),
+      labels =
+        c("10%", "20%","30%", "40%","50%", "60%", "70%", "80%", "90%", "100%")
+    ) +
+    guides(
+      fill = 
+        guide_colorbar(
+          title = case_when(
+            str_detect(outcome, "kfr") ~ "Children's Mean Household Income Rank",
+            str_detect(outcome, "jail") ~ "% of Adults Incarcerated on April 1, 2010",
+            str_detect(outcome, "teenbrth") ~ "% of Children who grew up to have children\nbetween the ages of 13 - 19",
+            TRUE ~ "Outcome Proportion"
+          ),
+          title.position = "top",
+          title.theme = element_text(size = 7),
+          barwidth = 10,
+          barheight = .25
+        )
+    ) +
+    labs(
+      title = str_c(county)
+    )
+  
+}
+```
+
+```{r color finding function}
+color_values_ct <- function(small_tracts, outcome, rev_scale) {
+  
+  vals <-
+    c(
+      quantile(small_tracts[[outcome]], 0, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .025, na.rm = TRUE),
+      median(small_tracts[[outcome]], na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .975, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], 1, na.rm = TRUE)
+    ) 
+  
+  if (rev_scale == 1) vals = rev(vals)
+  
+  scales::rescale(vals)
+  
+}
+```
+
+```{r function to map metro area with sub metro}
+map_sub_metro <- function(state, submetro) {
+  
+  View(metro_divisions(year = 2011)) %>% 
+    filter(grepl(submetro, NAME)) %>% 
+    st_within(tracts(state = state, year = 2011), .) %>% 
+    map_lgl(function(x) {
+      if (length(x) == 1) {
+        return(TRUE)
+      } else {
+        return(FALSE)
+      }
+    }) %>% 
+    tracts(state = state, year = 2011)[., ] %>% 
+    ggplot() +
+    geom_sf() +
+    coord_sf(datum = NA) +
+    theme_void()
+  
+}
+```
+
+#===============================================================================
+
+```{r function map metro testing}
+map_metro("Washington", "Seattle", "kfr_pooled_pooled_p25", 0)
+```
+
+```{r}
+map_county("New York", "New York County", "jail_pooled_pooled_p25", 1)
+```
+
+
+#===============================================================================
+## Tidycensus
+
+```{r}
+#test <-
+county_subdivisions(state = "California", county = "Los Angeles County", year = 2011) %>% 
+  mutate(centroid = st_centroid(geometry)) %>% 
+  ggplot() +
+  geom_sf() +
+  geom_sf_text(aes(label = NAME), size = 2) +
+  coord_sf(datum = NA) +
+  theme_void()
+```
+
+#===============================================================================
+## Mapview 
+
+```{r}
+# state <- "Kentucky"
+# metro <- "Lexington"
+# outcome <- "kfr_pooled_pooled_p25"
+# 
+# focused_tracts <-
+#     core_based_statistical_areas(cb = TRUE, year = 2010) %>% 
+#     filter(grepl(metro, NAME)) %>% 
+#     st_within(tracts(state = state, year = 2010), .) %>% 
+#     map_lgl(function(x) {
+#       if (length(x) == 1) {
+#         return(TRUE)
+#       } else {
+#         return(FALSE)
+#       }
+#     }) %>% 
+#     tracts(state = state, year = 2010)[., ] %>% 
+#     st_transform(US_ALBERS) %>% 
+#     mutate(
+#       state = as.double(STATEFP10) %% 100,
+#       county = as.double(COUNTYFP10) %% 10000,
+#       tract = as.double(TRACTCE10) %% 1000000
+#     ) %>% 
+#     left_join(ct_outcomes_ez, by = c("state", "county", "tract"))
+# 
+# mapview(focused_tracts, zcol = outcome, legend = TRUE)
+
+
+```
+
+
+#===============================================================================
+## tmap 
+
+```{r tmap metro interactive mapping function}
+tmap_metro <- function(state, metro, outcome, rev_scale) {
+  
+  focused_tracts <-
+    core_based_statistical_areas(cb = TRUE, year = 2010) %>% 
+    filter(grepl(metro, NAME)) %>% 
+    st_within(tracts(state = state, year = 2010), .) %>% 
+    map_lgl(function(x) {
+      if (length(x) == 1) {
+        return(TRUE)
+      } else {
+        return(FALSE)
+      }
+    }) %>% 
+    tracts(state = state, year = 2010)[., ] %>% 
+    st_transform(US_ALBERS) %>% 
+    mutate(
+      state = as.double(STATEFP10) %% 100,
+      county = as.double(COUNTYFP10) %% 10000,
+      tract = as.double(TRACTCE10) %% 1000000
+    ) %>% 
+    left_join(ct_outcomes_ez, by = c("state", "county", "tract"))
+  
+  tm_basemap(leaflet::providers$Stamen.TonerLite) +
+    tm_shape(focused_tracts) +
+    tm_polygons(
+      outcome, 
+      breaks = color_values_tmap_ct(focused_tracts, outcome, rev_scale),
+      labels = my_format(color_values_tmap_ct(focused_tracts, outcome, rev_scale)),
+      style = "cont", 
+      palette = atlas_colors,
+      contrast = c(0, 0.9),
+      alpha = .8,
+      colorNA = atlas_na_color,
+      id = outcome,
+      border.alpha = .2,
+      title = case_when(
+        str_detect(outcome, "kfr") ~ "Children's Mean Household Income Rank",
+        str_detect(outcome, "jail") ~ "% of Adults Incarcerated on April 1, 2010",
+        str_detect(outcome, "teenbrth") ~ "% of Children who grew up to have children\nbetween the ages of 13 - 19",
+        TRUE ~ "Outcome Proportion"
+      )
+    ) +
+    tm_layout(
+      main.title = str_c(metro, ", ", state, " Metropolitan Area"),
+      frame = FALSE,
+      legend.outside = TRUE,
+      legend.stack = "horizontal",
+      legend.outside.position = "right",
+      legend.hist.width = 10
+    )
+  
+}
+```
+
+```{r tmap color finding function}
+color_values_tmap_ct <- function(small_tracts, outcome, rev_scale) {
+  
+  vals <-
+    c(
+      quantile(small_tracts[[outcome]], 0, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .025, na.rm = TRUE),
+      median(small_tracts[[outcome]], na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .975, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], 1, na.rm = TRUE)
+    ) 
+  
+  #if (rev_scale == 1) vals = rev(vals)
+  
+  vals
+  
+}
+```
+
+```{r}
+tmap_metro("Colorado", "Aurora", "kfr_pooled_pooled_p25", 0)
+```
+
+#===============================================================================
+
+## Essential Functions
+
+### Setting Colors
+
+```{r color finding function}
+color_values_ct <- function(small_tracts, outcome, rev_scale) {
+  
+  vals <-
+    c(
+      quantile(small_tracts[[outcome]], 0, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .025, na.rm = TRUE),
+      median(small_tracts[[outcome]], na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .975, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], 1, na.rm = TRUE)
+    ) 
+  
+  if (rev_scale == 1) vals = rev(vals)
+  
+  scales::rescale(vals)
+  
+}
+```
+
+```{r tmap color finding function}
+color_values_tmap_ct <- function(small_tracts, outcome) {
+  
+  vals <-
+    c(
+      quantile(small_tracts[[outcome]], 0, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .025, na.rm = TRUE),
+      median(small_tracts[[outcome]], na.rm = TRUE),
+      quantile(small_tracts[[outcome]], .975, na.rm = TRUE),
+      quantile(small_tracts[[outcome]], 1, na.rm = TRUE)
+    ) 
+  
+  vals
+  
+}
+```
+
+### Finding Data
+
+```{r function to find metro data}
+metro_bounds <- function(state, metro) {
+  
+    core_based_statistical_areas(cb = TRUE, year = 2010) %>% 
+    filter(grepl(metro, NAME)) %>% 
+    st_within(tracts(state = state, year = 2010), .) %>% 
+    map_lgl(function(x) {
+      if (length(x) == 1) {
+        return(TRUE)
+      } else {
+        return(FALSE)
+      }
+    }) %>% 
+    tracts(state = state, year = 2010)[., ] %>%
+    rename("GEOID" = "GEOID10") %>% 
+    transform_geo() %>% 
+    left_join(
+      ct_outcomes_ez %>% select(state, county, tract, contains("pooled")), 
+      by = c("state", "county", "tract")
+    )
+  
+}
+```
+
+```{r function to find state or county data}
+# Geography either "county" or "tract"
+# For tract level, MUST specify at least the state
+
+county_tract_bounds <- function(geography, state, county) {
+  
+  bounds <-  
+    get_decennial(
+      geography = geography,
+      state = state,
+      county = county,
+      geometry = TRUE, 
+      variables = "P005003", 
+      year = 2010
+    ) %>% 
+    transform_geo()
+  
+  if (geography == "county") {
+    return(
+      left_join(
+        bounds, 
+        county_ez %>% select(state, county, contains("pooled")),
+        by = c("state", "county")
+      )
+    )
+  }
+  
+  if (geography == "tract") {
+    return(
+      left_join(
+        bounds, 
+        ct_outcomes_ez %>% select(state, county, tract, contains("pooled")),
+        by = c("state", "county", "tract")
+      )
+    )
+  }
+  
+}
+```
+
+```{r function to transform projection and mutate fips}
+transform_geo <- function(geo_bounds) {
+  
+  geo_bounds %>% 
+    st_transform(US_ALBERS) %>% 
+    mutate(
+      state = as.integer(str_extract(GEOID, "^\\d{2}")),
+      county = as.integer(str_extract(GEOID, "(?<=\\d{2})\\d{3}")),
+      tract = as.integer(str_extract(GEOID, "\\d{6}$"))
+    ) %>% 
+    filter(
+      state != alaska_state_fip, 
+      state != hawaii_state_fip, 
+      state != pr_state_fip
+    )
+}
+```
+
+
+### Mapping Data
+
+```{r}
+generate_tmap <- function(bounds, outcome)
+
+tm_basemap(leaflet::providers$Stamen.TonerLite) +
+    tm_shape(bounds) +
+    tm_polygons(
+      outcome, 
+      breaks = color_values_tmap_ct(bounds, outcome),
+      labels = my_format(color_values_tmap_ct(bounds, outcome)),
+      style = "cont",
+      palette = atlas_colors,
+      contrast = c(0, 0.9),
+      alpha = .8,
+      colorNA = atlas_na_color,
+      id = outcome,
+      border.alpha = .2,
+      title = case_when(
+        str_detect(outcome, "kfr") ~ "Children's Mean Household Income Rank",
+        str_detect(outcome, "jail") ~ "% of Adults Incarcerated on April 1, 2010",
+        str_detect(outcome, "teenbrth") ~ "% of Children who grew up to have children\nbetween the ages of 13 - 19",
+        TRUE ~ "Outcome Proportion"
+      )
+    ) +
+    tm_layout(
+      main.title = str_c("title"),
+      frame = FALSE,
+      legend.outside = TRUE,
+      legend.stack = "horizontal",
+      legend.outside.position = "right",
+      legend.hist.width = 10
+    )
+```
+
+```{r}
+generate_gmap <- function(bounds, outcome, rev_scale) {
+  
+  ggplot(data = bounds) +
+    geom_sf(aes(fill = bounds[[outcome]]), color = NA) +
+    coord_sf(datum = NA) +
+    theme_void() +
+    theme(
+      legend.position = "bottom",
+      legend.text = element_text(size = 5)
+    ) +
+    scale_fill_gradientn(
+      colors = atlas_colors,
+      values = color_values_ct(focused_tracts, outcome, rev_scale),
+      na.value = atlas_na_color,
+      breaks = seq(.1, 1, by = .1),
+      labels =
+        c("10%", "20%","30%", "40%","50%", "60%", "70%", "80%", "90%", "100%")
+    ) +
+    guides(
+      fill = 
+        guide_colorbar(
+          title = case_when(
+            str_detect(outcome, "kfr") ~ "Children's Mean Household Income Rank",
+            str_detect(outcome, "jail") ~ "% of Adults Incarcerated on April 1, 2010",
+            str_detect(outcome, "teenbrth") ~ "% of Children who grew up to have children\nbetween the ages of 13 - 19",
+            TRUE ~ "Outcome Proportion"
+          ),
+          title.position = "top",
+          title.theme = element_text(size = 7),
+          barwidth = 10,
+          barheight = .25
+        )
+    ) +
+    labs(
+      title = "title",
+      fill = "hello"
+    )
+  
+}
+```
+
+
+```{r}
+tmap_metro <- function(state, metro, outcome) {
+  
+  generate_tmap(metro_bounds(state, metro), outcome)
+  
+}
+```
+
+```{r}
+tmap_region <- function(geography, state = NULL, county = NULL, outcome) {
+  
+  generate_tmap(
+    county_tract_bounds(geography, state, county), 
+    outcome
+  )
+  
+}
+```
+
+```{r}
+gmap_region <- function(geography, state = NULL, county = NULL, outcome, rev_scale = 0) {
+  
+  generate_gmap(
+    county_tract_bounds(geography, state, county), 
+    outcome, 
+    rev_scale
+  )
+  
+}
+```
+
+```{r}
+gmap_metro <- function(state, metro, outcome, rev_scale = 0) {
+  
+  generate_gmap(metro_bounds(state, metro), outcome, rev_scale)
+  
+}
+```
+
+### Testing function
+
+```{r}
+tidycensus_bounds(geography = "tract", state = "Kentucky", county = "Jessamine")
+
+tmap_metro(state = "Washington", metro = "Seattle", outcome = "jail_pooled_pooled_p25", rev_scale = 0)
+
+tmap_region(geography = "tract", state = "New York", county = "New York County", outcome = "kfr_pooled_pooled_p25")
+
+gmap_metro(state = "Washington", metro = "Seattle", outcome = "teenbrth_pooled_female_p25", rev_scale = 1)
+```
+
+
+#===============================================================================
+
+## National Maps
+
+```{r static national @ county level}
+tmap_region(geography = "county", outcome = "kfr_pooled_pooled_p25") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(main.title = "National Household Income Outcomes for Children whose\nParents were in the Bottom 25th Percentile") +
+  tmap_mode("plot")
+```
+
+```{r interactive national @ county level}
+tmap_region(geography = "county", outcome = "kfr_pooled_pooled_p25") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(main.title = "National Household Income Outcomes for Adults whose\nParents were in the Bottom 25th Percentile") +
+  tmap_mode("view")
+```
+
+```{r interactive national @ county level}
+tmap_region(geography = "county", outcome = "jail_pooled_pooled_p25") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(main.title = "Male Incarceration Rates for Adults whose\nParents were in the Bottom 25th Percentile") +
+  tmap_mode("view")
+```
+
+```{r interactive national @ county level}
+tmap_region(geography = "county", outcome = "teenbrth_pooled_female_p25") +
+  tm_shape(state_borders) +
+  tm_borders(col = "black") +
+  tm_layout(main.title = "Proportion of Adults Who Had a Teen Pregnancy and whose\nParents were in the Bottom 25th Percentile") +
+  tmap_mode("view")
+```
+
+
+## Small Regions
+
+```{r Los Angeles metropolitan areas}
+print(
+  tmap_metro(
+    state = "California", 
+    metro = "Los Angeles", 
+    outcome = "kfr_pooled_pooled_p25"
+  ) +
+  tm_layout(main.title = "National Household Income Outcomes for Adults whose\nParents were in the Bottom 25th Percentile") +
+  tmap_mode("view")
+)
+
+print(
+  tmap_metro(
+    state = "California", 
+    metro = "Los Angeles", 
+    outcome = "jail_pooled_pooled_p25"
+  ) +
+  tm_layout(main.title = "Male Incarceration Rates for Adults whose\nParents were in the Bottom 25th Percentile") +
+  tmap_mode("view")
+)
+
+print(
+  tmap_metro(
+    state = "California", 
+    metro = "Los Angeles", 
+    outcome = "teenbrth_pooled_female_p25"
+  ) +
+  tm_layout(main.title = "Proportion of Adults Who Had a Teen Pregnancy and whose\nParents were in the Bottom 25th Percentile") +
+  tmap_mode("view")
+)
+
+```
+
+```{r Los Angeles metropolitan areas}
+print(
+  map_metro(
+    state = "Illinois", 
+    metro = "Chicago", 
+    outcome = "kfr_pooled_pooled_p25",
+    rev_scale = 0
+  ) 
+)
+
+print(
+  map_metro(
+    state = "Illinois", 
+    metro = "Chicago", 
+    outcome = "jail_pooled_pooled_p25",
+    rev_scale = 1
+  ) 
+)
+
+print(
+  map_metro(
+    state = "Illinois", 
+    metro = "Chicago", 
+    outcome = "teenbrth_pooled_female_p25",
+    rev_scale = 1
+  ) 
+)
+
+```
+
