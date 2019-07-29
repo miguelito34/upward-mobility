@@ -24,4 +24,4 @@ As mentioned above this work builds off of data and research from The Opportunit
  
  ### Author's Notes
  
-To view a rough draft of this work, which I'm going to be refining and adding to in the coming months, the easiest way currently is to download a [zip of this repository](https://github.com/miguelito34/upward-mobility/archive/master.zip). As I refine and update the work I'll find better ways to display the charts and maps.
+To view a rough draft of this work, which I'm going to be refining and adding to in the coming months, the easiest way currently is to download a [zip of this repository](https://github.com/miguelito34/upward-mobility/archive/master.zip), unzip it in your file manager, and open the file "step_6_final_report.html" in your web browser. As I refine and update the work I'll find better ways to display the charts and maps.
